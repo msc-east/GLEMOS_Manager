@@ -1,0 +1,817 @@
+#!/bin/csh -f
+set nonomatch=1
+
+#################################################
+# A managing script for GLEMOS spin-up 
+# and running
+# (c) Mikhail Kleimenov, MSC-E, 2021
+#################################################
+
+# setting names of the main files
+set GLEMOS_FILE=glemos
+set RUNINFO=./RunInfo.dat
+set RUNINFO_SPINUP=./Info/RunInfo.dat.spinup
+set OUTCONF_SPINUP=./Info/Output_config.dat.spinup
+set RUNINFO_MAIN=./Info/RunInfo.dat.main
+set OUTCONF_MAIN=./Info/Output_config.dat.main
+set OUTDIR_SPINUP=./Output_dir_spinup
+set OUTDIR_MAIN=./Output_dir_main
+set SPINUP_BALANCE_DIR=${OUTDIR_SPINUP}/Balance
+set BALANCE_FILE=Balance.dat
+set CALCLOG_FILE=CalcRun.log
+
+# Checking if the simulation was ended
+if ( -e ${OUTDIR_MAIN}/CalcRun.log ) then
+    set finish=` grep -c "Finished:" ${OUTDIR_MAIN}/CalcRun.log `
+    if ( $finish != 0 ) then
+        echo 'The main simulation that was run in this directory ended successfully. This simulation cannot be run again in this directory.'
+	exit
+    endif
+endif
+
+# Checing if the model was compiled
+if !( -e ./$GLEMOS_FILE ) then
+    echo 'File "glemos" is missing in the run directory. You should run the "make.GLEMOS" script first to compile the model and create this file.'
+    exit 0
+endif
+
+# Checking which of the simulations fell (if it fell)
+set trouble = 'no'
+
+if ( -e ${OUTDIR_MAIN}/CalcRun.log ) then
+    set finish=` grep -c "Finished:" ./${OUTDIR_MAIN}/CalcRun.log `
+    if ( $finish == 0 ) then
+        set trouble = 'main'
+    endif
+endif
+
+if ( -e ${OUTDIR_SPINUP}/CalcRun.log ) then
+    set finish=` grep -c "Finished:" ./${OUTDIR_SPINUP}/CalcRun.log `
+    if ( $finish == 0 ) then
+        set trouble = 'spinup'
+    endif
+endif
+
+# rewriting dump path in runinfo file
+switch ($trouble)
+
+    case 'main': 
+
+        set main_dump_count=`ls ${OUTDIR_MAIN}/Dump | wc -l`           
+        if ($main_dump_count != 0) then                             
+            set main_dump_files = `ls -c ${OUTDIR_MAIN}/Dump`     
+            set dump_file=$main_dump_files[1]
+            set dump_dir = "${OUTDIR_MAIN}/Dump/"
+            echo -n "Do you want to resume the main simulation using ${dump_dir}${dump_file}? (yes/no) "
+            set answer=$<
+            set rep=0
+            while ($rep < 1)
+                if ($answer == "no" || $answer == "yes") then
+                    @ rep++
+                else
+                    echo -n 'Please, enter "yes" or "no": '
+                    set answer=$<
+                endif
+            end
+            if ( $answer == 'no' ) then
+                echo ''
+                exit
+            endif
+            set RUNINFO_COUNT=`find ./Info/ -name "RunInfo.dat.main_restart*" -printf '.' | wc -m`
+	    @ RUNINFO_COUNT++
+	    cp ${RUNINFO_MAIN} ${RUNINFO_MAIN}_restart${RUNINFO_COUNT}
+            sed -i '/Conditions:/d' ${RUNINFO_MAIN}
+	    sed -i '/Initial conditions/d' ${RUNINFO_MAIN}
+            set init_pres = ` grep -c "Init file:" ${RUNINFO_MAIN} `
+            if ($init_pres > 0) then
+                sed -i '/Init cond path/d' ${RUNINFO_MAIN}
+                sed -i '/Init file/d' ${RUNINFO_MAIN}
+            endif
+            echo  "\!***************** Initial conditions *****************\!" >>& ${RUNINFO_MAIN}
+            echo  "Conditions:            dump" >>& ${RUNINFO_MAIN}
+            echo  "Init cond path: ${dump_dir}" >>& ${RUNINFO_MAIN}
+            echo  "Init file: ${dump_file}" >>& ${RUNINFO_MAIN}
+        else
+            echo -n "No dump files found to restart the main simulation. Do you want to restart the main simulation from the beginning? (yes/no) "
+            set answer=$<
+            set rep=0
+            while ($rep < 1)
+                if ($answer == "no" || $answer == "yes") then
+                    @ rep++
+                else
+                    echo -n 'Please, enter "yes" or "no": '
+                    set answer=$<
+                endif
+            end
+            if ( $answer == 'no' ) then
+                echo ''
+                exit
+            endif
+        endif
+	if ( -e ${RUNINFO} ) then
+                rm -f ${RUNINFO}
+        endif
+	breaksw
+
+    case 'spinup':
+
+        set spinup_dump_count=`ls ${OUTDIR_SPINUP}/Dump | wc -l`
+        if ($spinup_dump_count != 0) then
+            set spinup_dump_files = `ls -c ${OUTDIR_SPINUP}/Dump`
+            set dump_file = $spinup_dump_files[1]
+            set dump_file_tail=`echo ${dump_file} | cut -d "_" -f 3`
+            set dump_dir = "${OUTDIR_SPINUP}/Dump/"
+            set spinup_end = `grep "Finish:" ${RUNINFO_SPINUP} | cut -d ":" -f 2 | sed 's/ //g'`
+            set spinup_end_day = `echo ${spinup_end} | cut -d "/" -f 1`
+            set spinup_end_month = `echo ${spinup_end} | cut -d "/" -f 2`
+            set spinup_end_year = `echo ${spinup_end} | cut -d "/" -f 3`
+            set spinup_end_reversed = ${spinup_end_year}${spinup_end_month}${spinup_end_day}
+            echo -n "Do you want to resume the spin-up using ${dump_dir}${dump_file}? (yes/no) "
+            set answer=$<
+            set rep=0
+            while ($rep < 1)
+                if ($answer == "no" || $answer == "yes") then
+                    @ rep++
+                else
+                    echo -n 'Please, enter "yes" or "no": '
+                    set answer=$<
+                endif
+            end
+            if ( $answer == 'no' ) then
+                echo ''
+                exit
+            endif
+            if ( -e ${RUNINFO} ) then
+                rm -f ${RUNINFO}
+	    endif
+	    set RUNINFO_COUNT=`find ./Info/ -name "RunInfo.dat.spinup_restart*" -printf '.' | wc -m`
+	    @ RUNINFO_COUNT++
+            cp ${RUNINFO_SPINUP} ${RUNINFO_SPINUP}_restart${RUNINFO_COUNT}
+            sed -i '/Conditions:/d' ${RUNINFO_SPINUP}
+	    sed -i '/Initial conditions/d' ${RUNINFO_SPINUP}
+            set init_pres = ` grep -c "Init file:" ${RUNINFO_SPINUP} `
+            if ($init_pres > 0) then
+                sed -i '/Init cond path/d' ${RUNINFO_SPINUP}
+                sed -i '/Init file/d' ${RUNINFO_SPINUP}
+            endif
+            echo  "\!***************** Initial conditions *****************\!" >>& ${RUNINFO_SPINUP}
+            if (${dump_file_tail} == ${spinup_end_reversed}.bin) then
+                echo  "Conditions:            cond" >>& ${RUNINFO_SPINUP}
+            else
+                echo  "Conditions:            dump" >>& ${RUNINFO_SPINUP}
+            endif
+            echo  "Init cond path: ${dump_dir}" >>& ${RUNINFO_SPINUP}
+            echo  "Init file: ${dump_file}" >>& ${RUNINFO_SPINUP}
+        else
+            echo -n "No dump files found to restart model spin-up. Do you want to restart the model spin-up using zero conditions? (yes/no) "
+            set answer=$<
+            set rep=0
+            while ($rep < 1)
+                if ($answer == "no" || $answer == "yes") then
+                    @ rep++
+                else
+                    echo -n 'Please, enter "yes" or "no": '
+                    set answer=$<
+                endif
+            end
+            if ( $answer == 'no' ) then
+                echo ''
+                exit
+            endif
+            rm -f ${RUNINFO}
+        endif
+    breaksw
+endsw
+
+# creating output main and spinup directory subdirectories
+if ( -e $RUNINFO_SPINUP ) then
+	set RUNINFO_ARRAY = ( $RUNINFO_SPINUP $RUNINFO_MAIN )
+	set OUTCONF_ARRAY = ( $OUTCONF_SPINUP $OUTCONF_MAIN )
+	set OUTDIR_ARRAY = ( $OUTDIR_SPINUP $OUTDIR_MAIN )
+	set ARRAY_LEN = 2
+	
+        if ( -e ./${OUTDIR_SPINUP}/CalcRun.log ) then
+	set CREATE_SPINUP_SUBOUTDIRS = 0
+	else
+	set CREATE_SPINUP_SUBOUTDIRS = 1
+	endif
+	
+        if ( -e ./${OUTDIR_MAIN}/CalcRun.log ) then	
+        set CREATE_MAIN_SUBOUTDIRS = 0
+        else
+        set CREATE_MAIN_SUBOUTDIRS = 1
+        endif
+
+	set CREATE_SUBOUTDIRS = ( $CREATE_SPINUP_SUBOUTDIRS $CREATE_MAIN_SUBOUTDIRS)
+else
+        set RUNINFO_ARRAY = ( $RUNINFO_MAIN )
+        set OUTCONF_ARRAY = ( $OUTCONF_MAIN )
+        set OUTDIR_ARRAY = ( $OUTDIR_MAIN )
+        set ARRAY_LEN = 1
+	
+        if ( -e ./${OUTDIR_MAIN}/CalcRun.log ) then
+        set CREATE_MAIN_SUBOUTDIRS = 0
+        else
+        set CREATE_MAIN_SUBOUTDIRS = 1
+        endif
+
+        set CREATE_SUBOUTDIRS = ( $CREATE_MAIN_SUBOUTDIRS )
+endif
+
+
+# loop
+set i = 1
+while ( $i <= $ARRAY_LEN )
+	
+	set CREATE_SUBOUTDIR = $CREATE_SUBOUTDIRS[$i]
+        if ( $CREATE_SUBOUTDIR == 1 ) then
+	
+	set RunInfo = $RUNINFO_ARRAY[$i]
+	set OutputConf = $OUTCONF_ARRAY[$i]
+        set OutputDir = $OUTDIR_ARRAY[$i]	
+	rm -rf ${OutputDir}
+	mkdir ${OutputDir}
+	# reading start date
+	set str = `grep '^Start' $RunInfo`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set str = `expr substr "$str" $start $leng`
+	set str = `echo $str | tr / " "`
+	set dateStart=($str)
+	
+	# reading finish date
+	set str = `grep '^Finish' $RunInfo`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set str = `expr substr "$str" $start $leng`
+	set str = `echo $str | tr / " "`
+	set dateFinish=($str)
+	
+	# Reading Run type
+	set str = `grep '^Run type' $RunInfo`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set RunType = `expr substr "$str" $start $leng`
+	switch($RunType)
+  	  case field
+    	    set Matrix = 0
+    	  breaksw
+  	  case matrix
+    	    set Matrix = 1
+    	  breaksw
+	endsw
+
+	# Reading number of media
+	set str = `grep '^Number of media' $RunInfo`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set NumMedia = `expr substr "$str" $start $leng`
+	
+	# Reading list of media
+	set str = `grep '^Media ID' $RunInfo`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set str = `expr substr "$str" $start $leng`
+	set str2 = `echo $str | tr , " "`
+	set Media=($str2)
+
+	# Reading name of output sunbdirectories
+	set str = `grep '^Monitor Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set MonitorDir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^Dump Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set DumpDir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^Balance Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set BalanceDir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^Matrix Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set MatrixDir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^Fields Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set FieldsDir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^Fields NCF Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set NCFdir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^Yearly Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set YearlyDir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^Monthly Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set MonthlyDir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^Daily Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set DailyDir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^6hourly Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set PeriodDir = `expr substr "$str" $start $leng`
+	
+	set str = `grep '^Hourly Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set HourlyDir = `expr substr "$str" $start $leng`	
+
+	#mkdir $OutputDir
+	mkdir $OutputDir'/'$DumpDir
+	mkdir $OutputDir'/'$BalanceDir
+	
+	# Defining output time scales
+	set med = 1
+	while ( $med <= $NumMedia ) 
+
+	  set str = `grep '^'$Media[$med]' Monitor Hourly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set MonitorHourly = 1
+	      breaksw
+	    case off
+	      set MonitorHourly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Monitor 6hourly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set Monitor6hourly = 1
+	      breaksw
+	    case off
+	      set Monitor6hourly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Monitor Daily' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set MonitorDaily = 1
+	      breaksw
+	    case off
+	      set MonitorDaily = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Monitor Monthly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set MonitorMonthly = 1
+	      breaksw
+	    case off
+	      set MonitorMonthly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Monitor Yearly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set MonitorYearly = 1
+	      breaksw
+	    case off
+	      set MonitorYearly = 0
+	      breaksw
+	  endsw
+	
+	  set str = `grep '^'$Media[$med]' Fields Hourly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set FieldsHourly = 1
+	      breaksw
+	    case off
+	      set FieldsHourly = 0
+	      breaksw
+	  endsw
+	
+	  set str = `grep '^'$Media[$med]' Fields 6hourly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set Fields6hourly = 1
+	      breaksw
+	    case off
+	      set Fields6hourly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Fields Daily' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set FieldsDaily = 1
+	      breaksw
+	    case off
+	      set FieldsDaily = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Fields Monthly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set FieldsMonthly = 1
+	      breaksw
+	    case off
+	      set FieldsMonthly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Fields Yearly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set FieldsYearly = 1
+	      breaksw
+	    case off
+	      set FieldsYearly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' NCF Hourly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set NCFhourly = 1
+	      breaksw
+	    case off
+	      set NCFhourly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' NCF 6hourly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set NCF6hourly = 1
+	      breaksw
+	    case off
+	      set NCF6hourly = 0
+	      breaksw
+	  endsw
+	
+	  set str = `grep '^'$Media[$med]' NCF Daily' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set NCFdaily = 1
+	      breaksw
+	    case off
+	      set NCFdaily = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' NCF Monthly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set NCFmonthly = 1
+	      breaksw
+	    case off
+	      set NCFmonthly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' NCF Yearly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set NCFyearly = 1
+	      breaksw
+	    case off
+	      set NCFyearly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Matrix Daily' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	     set MatrixDaily = 1
+	      breaksw
+	    case off
+	      set MatrixDaily = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Matrix Monthly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set MatrixMonthly = 1
+	      breaksw
+	    case off
+	      set MatrixMonthly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Matrix Yearly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set MatrixYearly = 1
+	      breaksw
+	    case off
+	      set MatrixYearly = 0
+	      breaksw
+	  endsw
+	
+	# Creating output directories
+  	  mkdir $OutputDir'/'$Media[$med]
+	  mkdir $OutputDir'/'$Media[$med]'/'$MonitorDir
+	  mkdir $OutputDir'/'$Media[$med]'/'$FieldsDir
+	  mkdir $OutputDir'/'$Media[$med]'/'$NCFdir
+
+	  if ( $MonitorHourly ) mkdir $OutputDir'/'$Media[$med]'/'$MonitorDir'/'$HourlyDir
+	  if ( $Monitor6hourly ) mkdir $OutputDir'/'$Media[$med]'/'$MonitorDir'/'$PeriodDir
+	  if ( $MonitorDaily ) mkdir $OutputDir'/'$Media[$med]'/'$MonitorDir'/'$DailyDir
+	  if ( $MonitorMonthly ) mkdir $OutputDir'/'$Media[$med]'/'$MonitorDir'/'$MonthlyDir
+	  if ( $MonitorYearly ) mkdir $OutputDir'/'$Media[$med]'/'$MonitorDir'/'$YearlyDir
+
+	  if ( $FieldsHourly ) mkdir $OutputDir'/'$Media[$med]'/'$FieldsDir'/'$HourlyDir
+	  if ( $Fields6hourly ) mkdir $OutputDir'/'$Media[$med]'/'$FieldsDir'/'$PeriodDir
+	  if ( $FieldsDaily ) mkdir $OutputDir'/'$Media[$med]'/'$FieldsDir'/'$DailyDir
+	  if ( $FieldsMonthly ) mkdir $OutputDir'/'$Media[$med]'/'$FieldsDir'/'$MonthlyDir
+	  if ( $FieldsYearly ) mkdir $OutputDir'/'$Media[$med]'/'$FieldsDir'/'$YearlyDir
+
+	  if ( $NCFhourly ) mkdir $OutputDir'/'$Media[$med]'/'$NCFdir'/'$HourlyDir
+	  if ( $NCF6hourly ) mkdir $OutputDir'/'$Media[$med]'/'$NCFdir'/'$PeriodDir
+	  if ( $NCFdaily ) mkdir $OutputDir'/'$Media[$med]'/'$NCFdir'/'$DailyDir
+	  if ( $NCFmonthly ) mkdir $OutputDir'/'$Media[$med]'/'$NCFdir'/'$MonthlyDir
+	  if ( $NCFyearly ) mkdir $OutputDir'/'$Media[$med]'/'$NCFdir'/'$YearlyDir
+
+	  if ( $Matrix ) then
+	    mkdir $OutputDir'/'$Media[$med]'/'$MatrixDir
+
+	    if ( $MatrixDaily ) mkdir $OutputDir'/'$Media[$med]'/'$MatrixDir'/'$DailyDir
+	    if ( $MatrixMonthly ) mkdir $OutputDir'/'$Media[$med]'/'$MatrixDir'/'$MonthlyDir
+	    if ( $MatrixYearly ) mkdir $OutputDir'/'$Media[$med]'/'$MatrixDir'/'$YearlyDir
+	  endif
+
+	  @ med++
+	end
+	endif
+	@ i++
+end
+#endif
+
+# scenario if spinup mode was set to ON
+if ( -e $RUNINFO_SPINUP ) then
+
+    if ($trouble == 'no' || $trouble == 'spinup') then
+    set N_SPINUPS=`grep "Number of spin-ups:" ${RUNINFO_SPINUP} | cut -d ':' -f 2 | awk '{print $1}'` 
+    if ( -e ${OUTDIR_SPINUP}/CalcRun.log ) then
+        set finish=` grep -c "Finished:" ${OUTDIR_SPINUP}/CalcRun.log `
+        if ( $finish == 0 ) then
+            if ($N_SPINUPS <= 0) then
+                echo "Error: Invalid number of spin-ups '${N_SPINUPS}' in ${RUNINFO_SPINUP} file. "
+                exit
+            endif
+        endif
+    endif
+    
+    while ($N_SPINUPS > 0)
+        cp $RUNINFO_SPINUP $RUNINFO
+        echo '******************************************************************************'
+        echo "Starting GLEMOS spin-up ..."
+        echo '******************************************************************************'
+        echo ''
+        ./$GLEMOS_FILE
+
+        if ( -e ${OUTDIR_SPINUP}/CalcRun.log ) then
+            set finish=` grep -c "Finished:" ${OUTDIR_SPINUP}/CalcRun.log `
+            if ( $finish == 0 ) then
+	        echo 'Spin-up failed.'
+	        exit
+            endif
+        else
+	    echo 'Spin-up failed.'
+            exit
+        endif
+        echo ''
+        echo '******************************************************************************'
+        echo "Model spin-up is over. "
+        echo '******************************************************************************'
+        echo ''
+        rm -f ${RUNINFO}
+        
+        #set k=`(ls ${RUNINFO_SPINUP}_finished* >/dev/null) |& grep -v "ls: cannot access" | wc -l`
+        set k=`find ./Info/ -name "RunInfo.dat.spinup_finished*" -printf '.' | wc -m`
+        @ k++
+        cp ${RUNINFO_SPINUP} ${RUNINFO_SPINUP}_finished${k}        
+        
+        if ( $N_SPINUPS > 1) then
+
+            cp ${OUTDIR_SPINUP}/${CALCLOG_FILE} ${OUTDIR_SPINUP}/${CALCLOG_FILE}${k}
+            cp ${SPINUP_BALANCE_DIR}/${BALANCE_FILE} ${SPINUP_BALANCE_DIR}/${BALANCE_FILE}${k}
+            rm -f ${OUTDIR_SPINUP}/${CALCLOG_FILE}
+
+            set dump_dir = "${OUTDIR_SPINUP}/Dump/"
+	    set spinup_dump_files = `ls -c $dump_dir`
+	    set dump_file = $spinup_dump_files[1]
+        
+            sed -i '/Conditions:/d' ${RUNINFO_SPINUP}
+            sed -i '/Initial conditions/d' ${RUNINFO_SPINUP}
+            set init_pres = ` grep -c "Init file:" ${RUNINFO_SPINUP} `
+            if ($init_pres > 0) then
+                sed -i '/Init cond path/d' ${RUNINFO_SPINUP}
+                sed -i '/Init file/d' ${RUNINFO_SPINUP}
+            endif
+            echo  "\!***************** Initial conditions *****************\!" >>& ${RUNINFO_SPINUP}
+            echo  "Conditions:            cond" >>& ${RUNINFO_SPINUP}
+            echo  "Init cond path: ${dump_dir}" >>& ${RUNINFO_SPINUP}
+            echo  "Init file: ${dump_file}" >>& ${RUNINFO_SPINUP}
+        
+            @ OUT_N_SPINUPS=${N_SPINUPS} - 1
+            
+        endif
+        @ N_SPINUPS--
+        sed -i '/Number of spin-ups:/d' ${RUNINFO_SPINUP}
+        echo  "Number of spin-ups: ${N_SPINUPS}" >>& ${RUNINFO_SPINUP}
+        if ( ${N_SPINUPS} > 1) then
+            echo "${N_SPINUPS} more spin-ups to go."
+        else
+            if ( ${N_SPINUPS} > 0) then
+                echo "${N_SPINUPS} more spin-up to go."
+            else
+                echo ""
+            endif
+        endif
+    end
+    endif
+
+    # main simulation
+    echo '******************************************************************************'
+    echo 'Starting main simulation...'
+    echo '******************************************************************************'
+    cp $RUNINFO_MAIN $RUNINFO
+    ./$GLEMOS_FILE
+    if ( -e ./${OUTDIR_MAIN}/CalcRun.log ) then
+        set finish=`grep -c "Finished:" ./${OUTDIR_MAIN}/CalcRun.log`
+        if ( $finish == 0 ) then
+	     echo 'Main simulation failed.'
+             exit
+        endif
+    else
+        echo 'Main simulation failed.'
+        exit
+
+    endif
+    rm -f $RUNINFO
+    echo ''
+    echo '******************************************************************************'
+    echo 'Main GLEMOS simulation ends successfully!'
+    echo '******************************************************************************'
+
+# scenario if spinup mode was set to OFF
+else
+    cp $RUNINFO_MAIN $RUNINFO
+    echo '******************************************************************************'
+    echo 'Starting GLEMOS simulation...'
+    echo '******************************************************************************'
+    echo ''
+    ./$GLEMOS_FILE
+
+    if ( -e ./${OUTDIR_MAIN}/CalcRun.log ) then
+        set finish=`grep -c "Finished:" ./${OUTDIR_MAIN}/CalcRun.log`
+        if ( $finish == 0 ) then
+	     echo 'Main simulation failed.'
+             exit
+        endif
+    else
+        echo 'Spin-up failed.'
+        exit
+    endif
+
+    rm -f $RUNINFO
+    echo ''
+    echo '******************************************************************************'
+    echo 'GLEMOS simulatioin ends successfully!'
+    echo '******************************************************************************'
+
+endif

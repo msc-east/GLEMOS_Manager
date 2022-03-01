@@ -1,0 +1,1226 @@
+#!/usr/bin/python3
+
+############################################################################################
+# imports
+import os
+import sys
+import shutil
+from calendar import monthrange
+from datetime import datetime, timedelta
+############################################################################################
+
+# paths to input files
+input_inconfig_path = './input.GLEMOS.config'
+outconfig_dir_path = './output_config/'
+
+############################################################################################
+#                                      FUNCTIONS
+############################################################################################
+
+def check_if_dates_zeros(date):
+    splt_date = date.split('/')
+    if splt_date[0] == '00' or splt_date[1] == '00' or splt_date[2] == '0000':
+        return(True)
+    else:
+        return(False)
+
+# a function that checks that the end date is after the start date of the simulation
+def check_simulation_dates(start_date, end_date):
+    start_date = datetime.strptime(start_date, '%d/%m/%Y') #reading start date of the simulation
+    end_date = datetime.strptime(end_date, '%d/%m/%Y') #reading end date of the simulation
+    diff = end_date - start_date # difference between start date and end date in days
+    if diff.days < 0:
+        return(True)
+    else:
+        return(False)
+
+# function for selecting the frequency of dump files writing during spin up
+def choose_dump_frequency(start_date, end_date):
+    start_date = datetime.strptime(start_date, '%d/%m/%Y') # reading start date of spin up
+    end_date = datetime.strptime(end_date, '%d/%m/%Y') # reading end date of spin up
+    last_day_of_month = monthrange(end_date.year, end_date.month)[1] # last day of the month on which spin up ends
+    diff = end_date - start_date # difference between start date and end date of spin up in days
+    if end_date.day == last_day_of_month:
+        return('monthly')
+    else:
+        if diff.days > 31:
+            print('WARNING: spin up simulation does not end on the last day of the month, so the dump frequency will be daily, between the start date and the end date '+str(diff.days)+' days.')
+        return('daily')
+
+# function returns number of days and months between two dates
+def months_between(date1,date2):
+    date1 = datetime.strptime(date1, '%d/%m/%Y')
+    date2 = datetime.strptime(date2, '%d/%m/%Y')
+    date2 = date2 + timedelta(days=1)
+    m1=date1.year*12+date1.month
+    m2=date2.year*12+date2.month
+    months=m2-m1
+    if date1.day>date2.day:
+        months-=1
+    return(months)
+
+############################################################################################
+#                                READING INPUT PARAMETERS
+############################################################################################
+
+#reading input parameters from 'input.GLEMOS.config' file
+with open(input_inconfig_path, 'r') as input_inconfig_file:
+    lines = input_inconfig_file.readlines()
+    for line in lines:
+        line = line.strip()
+
+        if line.startswith('VERSION'):
+            glemos_version = line.split(':')[1].strip()
+
+        if line.startswith('GRM_DIR'):
+            grm_dir = line.split(':')[1].strip()
+            if grm_dir.endswith('/'):
+                grm_dir = sourse_dir[:-1]
+        
+        if line.startswith('GLEMOS_DIR'):
+            sourse_dir = line.split(':')[1].strip()
+            if sourse_dir.endswith('/'):
+                sourse_dir = sourse_dir[:-1]
+            if sourse_dir.endswith(('${VERSION}','$VERSION', 'VERSION','{VERSION}')):
+                sourse_dir = sourse_dir.partition('VERSION')[0]
+                if sourse_dir.endswith('{'):
+                    sourse_dir = sourse_dir[:-1]
+                if sourse_dir.endswith('$'):
+                    sourse_dir = sourse_dir[:-1]
+                sourse_dir = sourse_dir + glemos_version
+
+        if line.startswith('DATA_PATH'):
+            data_path = line.split(':')[1].strip()
+            if data_path.endswith('/'):
+                data_path = data_path[:-1]
+        
+        if line.startswith('METEO_PATH'):
+            meteo_path = line.split(':')[1].strip() 
+            if meteo_path.endswith('/'):
+                meteo_path = meteo_path[:-1]
+            if meteo_path.startswith(('${DATA_PATH}','$DATA_PATH', 'DATA_PATH','{DATA_PATH}')):
+                meteo_path = meteo_path.partition('DATA_PATH')[2]
+                if meteo_path.startswith('}'):
+                    meteo_path = meteo_path[1:]
+                meteo_path = data_path + meteo_path
+        
+        if line.startswith('REACT_PATH'):
+            react_path = line.split(':')[1].strip()
+            if react_path.endswith('/'):
+                react_path = react_path[:-1]
+            if react_path.startswith(('${DATA_PATH}','$DATA_PATH', 'DATA_PATH','{DATA_PATH}')):
+                react_path = react_path.partition('DATA_PATH')[2]
+                if react_path.startswith('}'):
+                    react_path = react_path[1:]
+                react_path = data_path + react_path
+
+        if line.startswith('BOUND_COND_PATH'):
+            bound_cond_path = line.split(':')[1].strip()
+            if bound_cond_path.endswith('/'):
+                bound_cond_path = bound_cond_path[:-1]
+            if bound_cond_path.startswith(('${DATA_PATH}','$DATA_PATH', 'DATA_PATH', '{DATA_PATH}')):
+                bound_cond_path = bound_cond_path.partition('DATA_PATH')[2]
+                if bound_cond_path.startswith('}'):
+                    bound_cond_path = bound_cond_path[1:]
+                bound_cond_path = data_path + bound_cond_path
+       
+        if line.startswith('INIT_COND_PATH'):
+            init_cond_path = line.split(':')[1].strip()
+            if init_cond_path.endswith('/'):
+                init_cond_path = init_cond_path[:-1]
+            if init_cond_path.startswith(('${DATA_PATH}','$DATA_PATH', 'DATA_PATH', '{DATA_PATH}')):
+                init_cond_path = init_cond_path.partition('DATA_PATH')[2]
+                if init_cond_path.startswith('}'):
+                    init_cond_path = init_cond_path[1:]
+                init_cond_path = data_path + init_cond_path
+        
+        if line.startswith('INPUT_DIR'):
+            input_dir = line.split(':')[1].strip()
+            if input_dir.endswith('/'):
+                input_dir = input_dir[:-1]
+            if input_dir.startswith(('${DATA_PATH}','$DATA_PATH', 'DATA_PATH','{DATA_PATH}')):
+                input_dir = input_dir.partition('DATA_PATH')[2]
+                if input_dir.startswith('}'):
+                    input_dir = input_dir[1:]
+                input_dir = data_path + input_dir
+            if input_dir.endswith(('${VERSION}','$VERSION', 'VERSION','{VERSION}')):
+                input_dir = input_dir.partition('VERSION')[0]
+                if input_dir.endswith('{'):
+                    input_dir = input_dir[:-1]
+                if input_dir.endswith('$'):
+                    input_dir = input_dir[:-1]
+                input_dir = input_dir + glemos_version
+
+        if line.startswith('FC'):
+            fc = line.split(':')[1].strip()
+            if fc.endswith('/'):
+                fc = fc[:-1]
+        
+        if line.startswith('NETCDFF'):
+            netcdff_dir = line.split(':')[1].strip()
+            if netcdff_dir.endswith('/'):
+                netcdff_dir = netcdff_dir[:-1]
+        
+        if line.startswith('RUN_DIR_PATH'):
+            run_dir_root = line.split(':')[1].strip()
+            if run_dir_root.endswith('/'):
+                run_dir_root = run_dir_root[:-1]
+            if run_dir_root.startswith(('${GLEMOS_DIR}','$GLEMOS_DIR', 'GLEMOS_DIR','{GLEMOS_DIR}')):
+                run_dir_root = run_dir_root.partition('GLEMOS_DIR')[2]
+                if run_dir_root.startswith('}'):
+                    run_dir_root = run_dir_root[1:]
+                run_dir_root = sourse_dir + run_dir_root
+
+        if line.startswith('RUN_DIR_SUFF'):
+            run_dir_suff = line.split(':')[1].strip()
+
+        if line.startswith('OUTPUT_FORM_MODE'):
+            main_out_form_mode = line.split(':')[1].strip().lower()
+        
+        if line.startswith('OUTPUT_FOR_BOUND'):
+            out_for_bound = line.split(':')[1].strip().lower()
+        
+
+# reading pollutant groops from PollutantGroups.dat
+PollutantGroups_file = input_dir + "/Config/PollutantGroups.dat"
+pollut_group_list = {}
+with open(PollutantGroups_file, 'r') as pollut_f:
+    lines = pollut_f.readlines()
+    for line in lines:
+        line = line.strip().split(':')
+        if len(line) == 2:
+            group = line[0].strip()
+            pollutants = line[1].split(',')
+            pollutants = [p.strip() for p in pollutants]
+            pollut_group_list[group] = pollutants
+all_pollutants = []
+for value in pollut_group_list.values():
+    all_pollutants = all_pollutants + value
+
+# reading simulation parameters from input file
+simulations = list()
+with open(input_inconfig_path, 'r') as input_inconfig_file:
+    lines = input_inconfig_file.readlines()
+    for line in lines:
+        line = line.strip()
+        if line.startswith(tuple(all_pollutants)):
+            simulations.append(line)
+
+############################################################################################
+
+# processing simulation parameters
+if len(simulations) != 1:
+    print('Invalid number of simulations to run. Please, choose only one simulation in the input file and try again.')
+    sys.exit()
+
+simulation_pars = simulations[0].split('|')
+if len(simulation_pars) != 11:
+    print('Error. Invalid input table format.')
+    sys.exit()
+
+pollutant = simulation_pars[0].strip()
+grid_code = simulation_pars[1].strip()
+starttime = simulation_pars[2].strip()
+endtime = simulation_pars[3].strip()
+sim_type = simulation_pars[4].strip()
+media = simulation_pars[5].strip()
+media_list = media.split(',')
+number_media = str(len(media_list))
+all_media = ('Atm', 'Soil', 'Ocn', 'Veg')
+emission_dataset = simulation_pars[6].strip()
+run_mode = simulation_pars[7].strip()
+spinup_start = simulation_pars[8].strip()
+spinup_end = simulation_pars[9].strip()
+n_spinups = simulation_pars[10].strip()
+
+############################################################################################
+
+# definition of the pollutant groop
+for key, value in pollut_group_list.items():
+    if pollutant in value:
+        pollutant_groop = key
+
+# checking simulation start and end dates
+if check_if_dates_zeros(starttime):
+    print('Error. The start date of the main simumulation "'+starttime+'" must not be zero.')
+    sys.exit()
+
+if check_if_dates_zeros(endtime):
+    print('Error. The end date of the main simumulation "'+endtime+'" must not be zero.')
+    sys.exit()
+
+if check_simulation_dates(starttime, endtime):
+    print('Error. The start date of the main simulation is later than the end date.')
+    sys.exit()
+
+# checking simulation run mode
+if run_mode not in ('spin-up', 'cond','zero'):
+    print('Error. Unknown run mode '+run_mode+'. It can only be "spin-up", "cond" or "zero".')
+    sys.exit()
+
+# checking grid
+if not os.path.isfile(input_dir+'/Config/Grid_config_'+grid_code+'.dat'):
+    print('\nWarning: Unknown grig code "'+grid_code+'". Configuration file for this grid "'+input_dir+'/Config/Grid_config_'+grid_code+'.dat" cannot be found.\n')
+
+# checking run type
+if sim_type not in ('field', 'matrix'):
+    print('Error. Unknown simulation type '+sim_type+'. It can only be "field" or "matrix".')
+    sys.exit()
+
+# checking meadia list
+for m in media_list:
+    if m not in all_media:
+        print('Error. Unknown media '+m+'. It can only be "Atm", "Soil", "Ocn" or "Veg".')
+        sys.exit()
+
+# checking output formation mode
+
+if main_out_form_mode not in ('file', 'auto'):
+    print('Error. Unknown output formation mode "'+main_out_form_mode+'". It can be only "auto" or "file"')
+    sys.exit()
+
+if out_for_bound not in ('on', 'off'):
+    print('Error. Unknown value "'+out_for_bound+'" in "OUTPUT_FOR_BOUND" option. It can be only "on" or "off"')
+    sys.exit()
+
+n_spinups = int(n_spinups)
+if n_spinups < 1:
+    print('Error. Unvalid number of the spin-ups '+n_spinups+'. It must be integer and equal to or greater than 1.')
+    sys.exit()
+
+############################################################################################
+
+# reading grid config file and checkig if the simulation is regional
+
+glob_lon_start, glob_lon_end, glob_lat_start, glob_lat_end = -180., 180., -90., 90.
+
+grid_file = '{}/Config/Grid_config_{}.dat'.format(input_dir, grid_code)
+with open(grid_file, 'r') as grf:
+    while True:
+        line = grf.readline()
+        if not line:
+            break
+        if line.startswith('Grid origin'):
+            start_coords = line.split(':')[1].strip().split(',')
+            lon_start = float(start_coords[0].strip())
+            lat_start = float(start_coords[1].strip())
+        if line.startswith('Grid resolution'):
+            res = line.split(':')[1].strip().split(',')
+            lon_res = float(res[0].strip())
+            lat_res = float(res[1].strip())
+        if line.startswith('Grid size'):
+            size = line.split(':')[1].strip().split(',')
+            lon_size = float(size[0].strip())
+            lat_size = float(size[1].strip())
+
+if not lon_start or not lat_start or not lon_res or not lat_res or not lon_size or not lat_size:
+    print('Incorrect reading of grid config file {}.'.format(grid_file))
+    sys.exit()
+
+lon_end = round(lon_start + lon_res * lon_size, 3)
+lat_end = round(lat_start + lat_res * lat_size, 3)
+
+if glob_lon_start != lon_start or glob_lon_end != lon_end or glob_lat_start != lat_start or glob_lat_end != lat_end:
+    reg_simulation = True
+else:
+    reg_simulation = False
+
+############################################################################################
+
+# checkig spin-up dates
+
+if run_mode == 'spin-up':
+    spinup = True
+else:
+    spinup = False
+
+if spinup:
+    if check_if_dates_zeros(spinup_start):
+        print('Error. The start date of the spin up "'+spinup_start+'" must not be zero.')
+        sys.exit()
+
+    if check_if_dates_zeros(spinup_end):
+        print('Error. The end date of the spin up "'+spinup_end+'" must not be zero.')
+        sys.exit()
+
+    if check_simulation_dates(spinup_start, spinup_end):
+        print('Error. The start date of the spin-up is later than the end date.')
+        sys.exit()
+
+############################################################################################
+#                                 CREATING RUN DIRECTORY
+############################################################################################
+
+run_dir_path = run_dir_root+'/'+pollutant+'_'+grid_code+'_'+sim_type+run_dir_suff
+if os.path.exists(run_dir_path):
+    print('*****************************************************************************************')
+    print('GLEMOS.dir.maker (v'+glemos_version+')')
+    print('Сan not create run directory "'+run_dir_path+'" because directory for simulation with specified parameters already exists.')
+    print('*****************************************************************************************')
+    sys.exit()
+os.makedirs(run_dir_path)
+
+print('*****************************************************************************************')
+print('GLEMOS.dir.maker (v'+glemos_version+')')
+print('Creating GLEMOS run directory: '+run_dir_path)
+
+# creating "Info" directory
+os.makedirs(run_dir_path+'/Info')
+
+############################################################################################
+#               DEFINING INPUT FILE NAMES FOR SPIN UP AND MAIN SIMULATION
+############################################################################################
+
+if spinup:
+
+    runinfo_main_file = 'RunInfo.dat.main'
+    outconfig_main_file = 'Output_config.dat.main'
+    main_outdir = 'Output_dir_main'
+
+    runinfo_spinup_file = 'RunInfo.dat.spinup'
+    outconfig_spinup_file = 'Output_config.dat.spinup'
+    spinup_outdir = 'Output_dir_spinup'
+
+else:
+    runinfo_main_file = 'RunInfo.dat.main'
+    outconfig_main_file = 'Output_config.dat.main'
+    main_outdir = 'Output_dir_main'
+
+############################################################################################
+############################################################################################
+#                              CREATING FILES FOR SPIN UP
+############################################################################################
+############################################################################################
+
+if spinup:
+    # creating spin up "RunInfo.dat" file
+    with open(run_dir_path+'/Info/'+runinfo_spinup_file,'w') as runinfo:
+        runinfo.write("!***** File of conditions for spin up run *****!\n")
+        runinfo.write("\n")
+        runinfo.write("!GLEMOS version: "+glemos_version+"\n")
+        runinfo.write("\n")
+        runinfo.write("Number of spin-ups: "+str(n_spinups)+"\n")
+        runinfo.write("\n")
+        runinfo.write("!**************** Simulated pollutants ****************!\n")
+        runinfo.write("Pollutants number:     1\n")
+        runinfo.write("Pollutants ID:              "+pollutant+"\n")
+        runinfo.write("\n")
+        runinfo.write("!******** Start and finish dates of model run *********!\n")
+        runinfo.write("Start:                 "+spinup_start+"\n")
+        runinfo.write("Finish:                "+spinup_end+"\n")
+        runinfo.write("\n")
+        runinfo.write("!******************* Domain and grid ******************!\n")
+        runinfo.write("Grid code:             "+grid_code+"\n")
+        runinfo.write("\n")
+        runinfo.write("!************* Model run characteristics **************!\n")
+        runinfo.write("! Type of the model run:\n")
+        runinfo.write("Run type:              "+sim_type+"\n")
+        runinfo.write("\n")
+        runinfo.write("!***************** Initial conditions *****************!\n")
+        runinfo.write("Conditions:            zero\n")
+        runinfo.write("\n")
+        runinfo.write("!************ Switch to meteo climatic mode run *************!\n")
+        runinfo.write("Climatic meteo mode:         no\n")
+        runinfo.write("Climatic meteo year:         2000\n")
+        runinfo.write("\n")
+        runinfo.write("Climatic land cover mode:         no\n")
+        runinfo.write("Climatic land cover year:         2000\n")
+        runinfo.write("\n")
+        if pollutant_groop != 'HM':
+            runinfo.write("Climatic reactants mode:    no\n")
+            runinfo.write("Climatic reactants year:    9999           ! 9999 is a climatic dataset\n")
+            runinfo.write("\n")
+        runinfo.write("!****************** Simulated media *******************!\n")
+        runinfo.write("! Atm - atmosphere\n")
+        runinfo.write("! Soil - soil\n")
+        runinfo.write("! Ocn - ocean\n")
+        runinfo.write("! Veg - vegetation\n")
+        runinfo.write("Number of media:       "+number_media+"\n")
+        runinfo.write("Media ID:              "+media+"\n")
+        runinfo.write("\n")
+        if sim_type=="matrix":
+            runinfo.write("!********* Sources and receptors (matrix run) *********!\n")
+            runinfo.write("\n")
+            runinfo.write("! Anthropogenic sources\n")
+            runinfo.write("Ant sources mode:      all               ! choice: all, selected, none\n")
+            runinfo.write("Ant sources number:    14                ! for mode 'selected' \n")
+            runinfo.write("Ant sources codes:     DE, AT, BE, CH, CZ, DK, ES, FR, GB, IT, LU, NL, PL, SE      ! for mode 'selected' \n")
+            runinfo.write("\n")
+            runinfo.write("! Natural sources\n")
+            runinfo.write("Nat sources mode:      all               ! choice: all, selected, none\n")
+            runinfo.write("Nat sources number:    1                 ! for mode 'selected'\n")
+            runinfo.write("Nat sources codes:     NAT               ! for mode 'selected'\n")
+            runinfo.write("\n")
+            runinfo.write("! Boundary sources\n")
+            runinfo.write("Bnd sources mode:      all               ! choice: all, selected, none\n")
+            runinfo.write("Bnd sources number:    1         ! for mode 'selected'\n")
+            runinfo.write("Bnd sources codes:     Bnd               ! for mode 'selected'\n")
+            runinfo.write("\n")
+            runinfo.write("! Receptors\n")
+            runinfo.write("Receptors mode:        all               ! choice: all, selected, none\n")
+            runinfo.write("Receptors number:      2         ! for mode 'selected'\n")
+            runinfo.write("Receptors codes:       GB, RU            ! for mode 'selected'\n")
+            runinfo.write("\n")
+            runinfo.write("! Initial conditions\n")
+            runinfo.write("Initial cond mode:     multi             ! choice: single, multi\n")
+            runinfo.write("\n")
+            if pollutant_groop == 'HM':
+                runinfo.write("! Re-emission\n")
+                runinfo.write("Re-emission mode:      multi         ! choice: single, multi\n")
+                runinfo.write("\n")
+            if pollutant_groop == 'POP':
+                runinfo.write("! Re-emission\n")
+                runinfo.write("Re-emission mode:      single         ! choice: single, multi\n")
+                runinfo.write("\n")
+        runinfo.write("!**************** Meteorological data *****************!\n")
+        runinfo.write("Meteo path:            "+meteo_path+"/\n")
+        runinfo.write("\n")
+        if 'Ocn' in media_list:
+            runinfo.write("!**************** Oceanographic data *****************!\n")
+            runinfo.write("Ocean path:            "+data_path+"/OceanData/\n")
+            runinfo.write("\n")
+        runinfo.write("!****************** Emission data *********************!\n")
+        runinfo.write("Emission path:         "+data_path+"/Emissions/\n")
+        runinfo.write("Emission dataset:      "+emission_dataset+"\n")
+        if pollutant_groop == 'HG':
+            runinfo.write("Natur emis file:       _nat\n")
+            runinfo.write("\n")
+        if reg_simulation:
+            runinfo.write("!**************** Boundary conditions *****************!\n")
+            runinfo.write("Boundary path:         "+bound_cond_path+"/\n")
+            runinfo.write("Boundary file:         _bound_\n")
+            runinfo.write("\n")
+        if pollutant_groop != 'HM':
+            runinfo.write("!************ Atmospheric reactants data **************!\n")
+            runinfo.write("! Needed for Hg and POP simulations\n")
+            runinfo.write("Reactant source:      GEOS_Chem_2x2.5   ! GEOS_Chem_2x2.5/GEOS_Chem_4x5/MOZART  \n")
+            runinfo.write("Reactant path 1:      "+react_path+"/\n")
+            runinfo.write("Ozone conc file:      O3_\n")
+            runinfo.write("S02 conc file:        SO2_\n")
+            runinfo.write("OH conc file:         OH_\n")
+            runinfo.write("Reactant path 2:      "+data_path+"/ReactData/Processed/p-TOMCAT/v_1/\n")
+            runinfo.write("\n")
+        runinfo.write('!**************** Land cover data *********************!\n')
+        runinfo.write('LandCover source:      MODIS_MCD12Q1_v6    ! MODIS_MCD12Q1_v6/MODIS_MOD12\n')
+        runinfo.write('LandCover path:        /home/alex/InputData/LandCover/Processed/\n')
+        runinfo.write("Land Cover file:       LU_\n")
+        runinfo.write('\n')
+        if pollutant_groop == 'HM':
+            runinfo.write("!************** Dust resuspension data ****************!\n")
+            runinfo.write("! Needed for simulations of particulate heavy metals (Pb, Cd etc.) \n")
+            if grid_code == "GLOB_3x3":
+                runinfo.write("Dust data path:       "+data_path+"/Dust_INTERIM/\n")
+            else:
+                runinfo.write("Dust data path:       "+data_path+"/Dust/\n")
+            runinfo.write("Dust file:            dust_\n")
+            runinfo.write("Soil data path:       "+run_dir_path+"/Info/\n")
+            runinfo.write("Soil conc file:       _soil_\n")
+            runinfo.write("\n")
+        runinfo.write("!**************** Configuration files *****************!\n")
+        runinfo.write("Config path:         ./Info/\n")
+        runinfo.write("Groups file:        PollutantGroups.dat\n")
+        runinfo.write("Grid config file:      Grid_config_\n")
+        if sim_type=="matrix":
+            runinfo.write("Matrix config file:    _matrix_config_\n")
+        runinfo.write("LC config file:        LC_\n")
+        runinfo.write("Media config file:     _config\n")
+        runinfo.write("Output config file:    ./Info/"+outconfig_spinup_file+"\n")
+        runinfo.write("\n")
+        runinfo.write("!***************** Common input data ******************!\n")
+        runinfo.write("Geodata path:          "+input_dir+"/GeoData/\n")
+        runinfo.write("Properties path:       ./Info/\n")
+        if sim_type=="matrix":
+            runinfo.write("Receptors path:        "+input_dir+"/Receptors/\n")
+        runinfo.write("Stations path:         "+input_dir+"/Stations/\n")
+        runinfo.write("Common geophys:        Geophys.dat\n")
+        runinfo.write("Roughness file:        Roughness.dat\n")
+        runinfo.write("Properties file:       _props_"+grid_code+"_\n")
+        runinfo.write("Orography file:        Orography_\n")
+        if sim_type=="matrix":
+            runinfo.write("Receptors file:        Receptors_\n")
+        runinfo.write("Season file:           Seasons_\n")
+        runinfo.write("Stations file:         _stations\n")
+        runinfo.write("FOC file:              OC_\n")
+        if 'Ocn' in media_list:
+            runinfo.write("Ocean topo file:       Ocean_topo_\n")
+            runinfo.write("Ocean fract file:      LC2Ocean.dat\n")
+        if 'Soil' in media_list:
+            runinfo.write("Soil types file:       LC2TS.dat\n")
+        runinfo.write("\n")
+
+    # creating spin up "Output_dir" directory and spin up output configuration file
+ 
+    spinup_outputdir_path = run_dir_path+'/'+spinup_outdir
+    os.makedirs(spinup_outputdir_path)
+
+    with open(run_dir_path+'/Info/'+outconfig_spinup_file,'w') as outconfig_file:
+        outconfig_file.write('!***** Spin up output configuration *****!\n\n')
+        outconfig_file.write('! Spin up output directory\n')
+        outconfig_file.write('Output Dir:              '+spinup_outdir+'\n\n')
+        outconfig_file.write('! Internal output directories\n')
+        outconfig_file.write('Monitor Dir:             Monitoring\n')
+        outconfig_file.write('Dump Dir:                Dump\n')
+        outconfig_file.write('Balance Dir:             Balance\n')
+        outconfig_file.write('Matrix Dir:              Matrix\n')
+        outconfig_file.write('Fields Dir:              Fields\n')
+        outconfig_file.write('Fields NCF Dir:          Fields_NCF\n')
+        outconfig_file.write('Info Dir:                Info\n\n')
+        outconfig_file.write('Yearly Dir:              Yearly\n')
+        outconfig_file.write('Monthly Dir:             Monthly\n')
+        outconfig_file.write('Daily Dir:               Daily\n')
+        outconfig_file.write('6hourly Dir:             6hourly\n')
+        outconfig_file.write('Hourly Dir:              Hourly\n\n')
+        outconfig_file.write('! Defining dump time scales (yearly, monthly, daily)\n')
+        outconfig_file.write('Dump frequency:         '+choose_dump_frequency(spinup_start, spinup_end)+'\n\n')
+        outconfig_file.write('! Defining balance time scales (yearly, monthly, daily, 6hourly):\n')
+        outconfig_file.write('Balance frequency:      monthly\n\n')
+        # Atm spin up output parameters
+        outconfig_file.write('! Defining atmospheric output time scales:\n')
+        outconfig_file.write('Atm Monitor Hourly:      off\n')
+        outconfig_file.write('Atm Monitor 6hourly:     off\n')
+        outconfig_file.write('Atm Monitor Daily:       off\n')
+        outconfig_file.write('Atm Monitor Monthly:     off\n')
+        outconfig_file.write('Atm Monitor Yearly:      off\n\n')
+        outconfig_file.write('Atm Fields Hourly:       off\n')
+        outconfig_file.write('Atm Fields 6hourly:      off\n')
+        outconfig_file.write('Atm Fields Daily:        off\n')
+        outconfig_file.write('Atm Fields Monthly:      off\n')
+        outconfig_file.write('Atm Fields Yearly:       off\n\n')
+        outconfig_file.write('Atm NCF Hourly:          off\n')
+        outconfig_file.write('Atm NCF 6hourly:         off\n')
+        outconfig_file.write('Atm NCF Daily:           off\n')
+        if 'Atm' in media_list:
+            outconfig_file.write('Atm NCF Monthly:         on\n')
+            outconfig_file.write('Atm NCF Yearly:          on\n\n')
+        else:
+            outconfig_file.write('Atm NCF Monthly:         off\n')
+            outconfig_file.write('Atm NCF Yearly:          off\n\n')
+        outconfig_file.write('Atm Matrix Daily:        off\n')
+        if sim_type=="matrix" and 'Atm' in media_list:
+            outconfig_file.write('Atm Matrix Monthly:      on\n')
+            outconfig_file.write('Atm Matrix Yearly:       on\n\n')
+        else:
+            outconfig_file.write('Atm Matrix Monthly:      off\n')
+            outconfig_file.write('Atm Matrix Yearly:       off\n\n')
+        #Ocn spin up output parameters
+        outconfig_file.write('! Defining ocean output time scales:\n')
+        outconfig_file.write('Ocn Monitor Hourly:      off\n')
+        outconfig_file.write('Ocn Monitor 6hourly:     off\n')
+        outconfig_file.write('Ocn Monitor Daily:       off\n')
+        outconfig_file.write('Ocn Monitor Monthly:     off\n')
+        outconfig_file.write('Ocn Monitor Yearly:      off\n\n')
+        outconfig_file.write('Ocn Fields Hourly:       off\n')
+        outconfig_file.write('Ocn Fields 6hourly:      off\n')
+        outconfig_file.write('Ocn Fields Daily:        off\n')
+        outconfig_file.write('Ocn Fields Monthly:      off\n')
+        outconfig_file.write('Ocn Fields Yearly:       off\n\n')
+        outconfig_file.write('Ocn NCF Hourly:          off\n')
+        outconfig_file.write('Ocn NCF 6hourly:         off\n')
+        outconfig_file.write('Ocn NCF Daily:           off\n')
+        if 'Ocn' in media_list:
+            outconfig_file.write('Ocn NCF Monthly:         on\n')
+            outconfig_file.write('Ocn NCF Yearly:          on\n\n')
+        else:
+            outconfig_file.write('Ocn NCF Monthly:         off\n')
+            outconfig_file.write('Ocn NCF Yearly:          off\n\n')
+        outconfig_file.write('Ocn Matrix Daily:        off\n')
+        if sim_type=="matrix" and 'Ocn' in media_list:
+            outconfig_file.write('Ocn Matrix Monthly:      on\n')
+            outconfig_file.write('Ocn Matrix Yearly:       on\n\n')
+        else:
+            outconfig_file.write('Ocn Matrix Monthly:      off\n')
+            outconfig_file.write('Ocn Matrix Yearly:       off\n\n')
+        # Soil spin up output parameters
+        outconfig_file.write('! Defining soil output time scales:\n')
+        outconfig_file.write('Soil Monitor Hourly:      off\n')
+        outconfig_file.write('Soil Monitor 6hourly:     off\n')
+        outconfig_file.write('Soil Monitor Daily:       off\n')
+        outconfig_file.write('Soil Monitor Monthly:     off\n')
+        outconfig_file.write('Soil Monitor Yearly:      off\n\n')
+        outconfig_file.write('Soil Fields Hourly:       off\n')
+        outconfig_file.write('Soil Fields 6hourly:      off\n')
+        outconfig_file.write('Soil Fields Daily:        off\n')
+        outconfig_file.write('Soil Fields Monthly:      off\n')
+        outconfig_file.write('Soil Fields Yearly:       off\n\n')
+        outconfig_file.write('Soil NCF Hourly:          off\n')
+        outconfig_file.write('Soil NCF 6hourly:         off\n')
+        outconfig_file.write('Soil NCF Daily:           off\n')
+        if 'Soil' in media_list:
+            outconfig_file.write('Soil NCF Monthly:         on\n')
+            outconfig_file.write('Soil NCF Yearly:          on\n\n')
+        else:
+            outconfig_file.write('Soil NCF Monthly:         off\n')
+            outconfig_file.write('Soil NCF Yearly:          off\n\n')
+        outconfig_file.write('Soil Matrix Daily:        off\n')
+        if sim_type=="matrix" and 'Soil' in media_list:
+            outconfig_file.write('Soil Matrix Monthly:      on\n')
+            outconfig_file.write('Soil Matrix Yearly:       on\n\n')
+        else:
+            outconfig_file.write('Soil Matrix Monthly:      off\n')
+            outconfig_file.write('Soil Matrix Yearly:       off\n\n')
+        # Veg spin up output paramerers
+        outconfig_file.write('! Defining vegetation output time scales:\n')
+        outconfig_file.write('Veg Monitor Hourly:      off\n')
+        outconfig_file.write('Veg Monitor 6hourly:     off\n')
+        outconfig_file.write('Veg Monitor Daily:       off\n')
+        outconfig_file.write('Veg Monitor Monthly:     off\n')
+        outconfig_file.write('Veg Monitor Yearly:      off\n\n')
+        outconfig_file.write('Veg Fields Hourly:       off\n')
+        outconfig_file.write('Veg Fields 6hourly:      off\n')
+        outconfig_file.write('Veg Fields Daily:        off\n')
+        outconfig_file.write('Veg Fields Monthly:      off\n')
+        outconfig_file.write('Veg Fields Yearly:       off\n\n')
+        outconfig_file.write('Veg NCF Hourly:          off\n')
+        outconfig_file.write('Veg NCF 6hourly:         off\n')
+        outconfig_file.write('Veg NCF Daily:           off\n')
+        if 'Veg' in media_list:
+            outconfig_file.write('Veg NCF Monthly:         on\n')
+            outconfig_file.write('Veg NCF Yearly:          on\n\n')
+        else:
+            outconfig_file.write('Veg NCF Monthly:         off\n')
+            outconfig_file.write('Veg NCF Yearly:          off\n\n')
+        outconfig_file.write('Veg Matrix Daily:        off\n')
+        if sim_type=="matrix" and 'Veg' in media_list:
+            outconfig_file.write('Veg Matrix Monthly:      on\n')
+            outconfig_file.write('Veg Matrix Yearly:       on\n\n')
+        else:
+            outconfig_file.write('Veg Matrix Monthly:      off\n')
+            outconfig_file.write('Veg Matrix Yearly:       off\n\n')
+        # Spin up output files
+        outconfig_file.write('! Output files\n')
+        outconfig_file.write('Log file:               CalcRun.log\n')
+        outconfig_file.write('Conc monitor:           _AirConc_monitor_\n')
+        outconfig_file.write('Inprec monitor:         _InPrec_monitor_\n')
+        outconfig_file.write('Wet monitor:            _WetDep_monitor_\n')
+        outconfig_file.write('Dry monitor:            _DryDep_monitor_\n')
+        outconfig_file.write('Prec monitor:           _Precip_monitor_\n')
+        outconfig_file.write('NCF monitor:            _ncf_monitor\n')
+        outconfig_file.write('Mean conc file:         _Conc\n')
+        outconfig_file.write('Mix ratio file:         _MixRat\n')
+        outconfig_file.write('Total depos file:       _TotDep\n')
+        outconfig_file.write('Dry depos file:         _DryDep\n')
+        outconfig_file.write('Wet depos file:         _WetDep\n')
+        outconfig_file.write('In precip file:         _InPrec\n')
+        outconfig_file.write('Matrix wet dep file:    _MatrWetDep\n')
+        outconfig_file.write('Matrix dry dep file:    _MatrDryDep\n')
+        outconfig_file.write('Matrix tot dep file:    _MatrTotDep\n')
+        outconfig_file.write('Matrix conc file:       _MatrConc\n')
+        outconfig_file.write('Out ant file:           _AntEmis\n')
+        outconfig_file.write('Out nat file:           _NatEmis\n')
+        outconfig_file.write('Dump file:              Dump_\n')
+        outconfig_file.write('Ocn conc file:          _ConcOcn\n')
+        outconfig_file.write('Soil conc file:         _ConcSoil\n')
+        outconfig_file.write('Veg conc file:          _ConcVeg\n')
+        outconfig_file.write('Net depos file:         _NetDep\n')
+        outconfig_file.write('Remobiliz file:         _RemFlux\n')
+        outconfig_file.write('NCF output file:        _ncf_output_\n')
+        outconfig_file.write('Precip file:            PrecAmount\n')
+
+############################################################################################
+############################################################################################
+#                     CREATING INPUT FILES FOR MAIN SIMULATION
+############################################################################################
+############################################################################################
+
+# creating main "Output_dir" directory
+outputdir_path = run_dir_path+'/'+main_outdir 
+os.makedirs(outputdir_path)
+
+# creating "build" directory
+os.makedirs(run_dir_path+'/build/mods')
+os.makedirs(run_dir_path+'/build/objs')
+
+# creating main "Output_config.dat" file
+
+
+if outconfig_dir_path.endswith('/'):
+    outconfig_dir_path = outconfig_dir_path[:-1]
+
+input_outconfig_path = outconfig_dir_path+'/output.'+pollutant+'.config'
+with open(input_outconfig_path,'r') as input_outconfig_file:
+    outconf_lines = input_outconfig_file.readlines()
+outconf_lines = outconf_lines[3:]
+
+with open(run_dir_path+'/Info/'+outconfig_main_file,'w') as outconfig_file:
+    outconfig_file.write('!***** Model output configuration *****!\n\n')
+    outconfig_file.write('! Main output directory\n')
+    outconfig_file.write('Output Dir:              '+main_outdir+'\n\n')
+    outconfig_file.write('! Internal output directories\n')
+    outconfig_file.write('Monitor Dir:             Monitoring\n')
+    outconfig_file.write('Dump Dir:                Dump\n')
+    outconfig_file.write('Balance Dir:             Balance\n')
+    outconfig_file.write('Matrix Dir:              Matrix\n')
+    outconfig_file.write('Fields Dir:              Fields\n')
+    outconfig_file.write('Fields NCF Dir:          Fields_NCF\n')
+    outconfig_file.write('Info Dir:                Info\n\n')
+    outconfig_file.write('Yearly Dir:              Yearly\n')
+    outconfig_file.write('Monthly Dir:             Monthly\n')
+    outconfig_file.write('Daily Dir:               Daily\n')
+    outconfig_file.write('6hourly Dir:             6hourly\n')
+    outconfig_file.write('Hourly Dir:              Hourly\n\n')
+ 
+    if main_out_form_mode == 'file':
+            
+        if outconfig_dir_path.endswith('/'):
+            outconfig_dir_path = outconfig_dir_path[:-1]
+            
+        input_outconfig_path = outconfig_dir_path+'/output.'+pollutant+'.config'
+        with open(input_outconfig_path,'r') as input_outconfig_file:
+            outconf_lines = input_outconfig_file.readlines()
+
+        outconf_lines = outconf_lines[3:]
+
+        for outconf_line in outconf_lines:
+            if out_for_bound == 'on':
+                if outconf_line.startswith('Atm NCF 6hourly'):
+                    if outconf_line.split(':')[1].strip() != 'on':
+                        outconf_line = 'Atm NCF 6hourly:         on\n'
+                        print('NOTE: Atmospheric 6-hour netcdf output required for the boundary conditions calculation is enabled. It can be disabled in '+run_dir_path+'/Info/'+outconfig_main_file+'.')
+            if outconf_line.startswith('#'):
+                outconf_line = outconf_line.replace('#','!')
+            outconfig_file.write(outconf_line)
+
+    if main_out_form_mode == 'auto':
+        
+        nmonths = months_between(starttime, endtime)
+        if nmonths <1:
+            db_freq = 'daily'
+        else:
+            db_freq = 'monthly'
+        
+        outconfig_file.write('! Defining dump time scales (yearly, monthly, daily)\n')
+        outconfig_file.write('Dump frequency:         '+db_freq+'\n\n')
+        outconfig_file.write('! Defining balance time scales (yearly, monthly, daily, 6hourly):\n')
+        outconfig_file.write('Balance frequency:      '+db_freq+'\n\n')
+
+
+        for med in all_media:
+            if med in media_list:
+                if nmonths < 1:
+                    h_opt = 'off'
+                    h6_opt = 'off'
+                    d_opt = 'on'
+                    m_opt = 'off'
+                    y_opt = 'off'
+                elif nmonths >= 1 and nmonths < 12:
+                    h_opt = 'off'
+                    h6_opt = 'off'
+                    d_opt = 'off'
+                    m_opt = 'on'
+                    y_opt = 'off'
+                else:
+                    h_opt = 'off'
+                    h6_opt = 'off'
+                    d_opt = 'off'
+                    m_opt = 'on'
+                    y_opt = 'on'
+            else:
+                h_opt = 'off'
+                h6_opt = 'off'
+                d_opt = 'off'
+                m_opt = 'off'
+                y_opt = 'off'
+
+            if med in media_list and sim_type=="matrix":
+                if nmonths < 1:
+                    d_matr_opt = 'on'
+                    m_matr_opt = 'off'
+                    y_matr_opt = 'off'
+                elif nmonths >= 1 and nmonths < 12:
+                    d_matr_opt = 'off'
+                    m_matr_opt = 'on'
+                    y_matr_opt = 'off'
+                else:
+                    d_matr_opt = 'off'
+                    m_matr_opt = 'on'
+                    y_matr_opt = 'on'
+            else:
+                d_matr_opt = 'off'
+                m_matr_opt = 'off'
+                y_matr_opt = 'off'
+
+            nc_h6_opt = h6_opt
+
+            if med == 'Atm':
+                if out_for_bound == 'on':
+                    nc_h6_opt = 'on'
+                    print('NOTE: Atmospheric netcdf output in six-hour format enabled. It can be disabled in '+run_dir_path+'/Info/'+outconfig_main_file+'.')
+                
+            outconfig_file.write('! Defining '+med+' output time scales:\n')
+            outconfig_file.write(med+' Monitor Hourly:      off\n')
+            outconfig_file.write(med+' Monitor 6hourly:     off\n')
+            outconfig_file.write(med+' Monitor Daily:       off\n')
+            outconfig_file.write(med+' Monitor Monthly:     off\n')
+            outconfig_file.write(med+' Monitor Yearly:      off\n\n')
+            outconfig_file.write(med+' Fields Hourly:       '+h_opt+'\n')
+            outconfig_file.write(med+' Fields 6hourly:      '+h6_opt+'\n')
+            outconfig_file.write(med+' Fields Daily:        '+d_opt+'\n')
+            outconfig_file.write(med+' Fields Monthly:      '+m_opt+'\n')
+            outconfig_file.write(med+' Fields Yearly:       '+y_opt+'\n\n')
+            outconfig_file.write(med+' NCF Hourly:          '+h_opt+'\n')
+            outconfig_file.write(med+' NCF 6hourly:         '+nc_h6_opt+'\n')
+            outconfig_file.write(med+' NCF Daily:           '+d_opt+'\n')
+            outconfig_file.write(med+' NCF Monthly:         '+m_opt+'\n')
+            outconfig_file.write(med+' NCF Yearly:          '+y_opt+'\n\n')
+            outconfig_file.write(med+' Matrix Daily:        '+d_matr_opt+'\n')
+            outconfig_file.write(med+' Matrix Monthly:      '+m_matr_opt+'\n')
+            outconfig_file.write(med+' Matrix Yearly:       '+y_matr_opt+'\n\n')
+
+    outconfig_file.write('! Output files\n')
+    outconfig_file.write('Log file:               CalcRun.log\n')
+    outconfig_file.write('Conc monitor:           _AirConc_monitor_\n')
+    outconfig_file.write('Inprec monitor:         _InPrec_monitor_\n')
+    outconfig_file.write('Wet monitor:            _WetDep_monitor_\n')
+    outconfig_file.write('Dry monitor:            _DryDep_monitor_\n')
+    outconfig_file.write('Prec monitor:           _Precip_monitor_\n')
+    outconfig_file.write('NCF monitor:            _ncf_monitor\n')
+    outconfig_file.write('Mean conc file:         _Conc\n')
+    outconfig_file.write('Mix ratio file:         _MixRat\n')
+    outconfig_file.write('Total depos file:       _TotDep\n')
+    outconfig_file.write('Dry depos file:         _DryDep\n')
+    outconfig_file.write('Wet depos file:         _WetDep\n')
+    outconfig_file.write('In precip file:         _InPrec\n')
+    outconfig_file.write('Matrix wet dep file:    _MatrWetDep\n')
+    outconfig_file.write('Matrix dry dep file:    _MatrDryDep\n')
+    outconfig_file.write('Matrix tot dep file:    _MatrTotDep\n')
+    outconfig_file.write('Matrix conc file:       _MatrConc\n')
+    outconfig_file.write('Out ant file:           _AntEmis\n')
+    outconfig_file.write('Out nat file:           _NatEmis\n')
+    outconfig_file.write('Dump file:              Dump_\n')
+    outconfig_file.write('Ocn conc file:          _ConcOcn\n')
+    outconfig_file.write('Soil conc file:         _ConcSoil\n')
+    outconfig_file.write('Veg conc file:          _ConcVeg\n')
+    outconfig_file.write('Net depos file:         _NetDep\n')
+    outconfig_file.write('Remobiliz file:         _RemFlux\n')
+    outconfig_file.write('NCF output file:        _ncf_output_\n')
+    outconfig_file.write('Precip file:            PrecAmount\n')
+
+
+############
+# creating main "RunInfo.dat" file
+with open(run_dir_path+'/Info/'+runinfo_main_file,'w') as runinfo:
+    runinfo.write("!***** File of conditions for the calculation run *****!\n")
+    runinfo.write("\n")
+    runinfo.write("!GLEMOS version: "+glemos_version+"\n")
+    runinfo.write("\n")
+    runinfo.write("!**************** Simulated pollutants ****************!\n")
+    runinfo.write("Pollutants number:     1\n")
+    runinfo.write("Pollutants ID:	       "+pollutant+"\n")
+    runinfo.write("\n")
+    runinfo.write("!******** Start and finish dates of model run *********!\n")
+    runinfo.write("Start:                 "+starttime+"\n")
+    runinfo.write("Finish:                "+endtime+"\n")
+    runinfo.write("\n")
+    runinfo.write("!******************* Domain and grid ******************!\n")
+    runinfo.write("Grid code:             "+grid_code+"\n")
+    runinfo.write("\n")
+    runinfo.write("!************* Model run characteristics **************!\n")
+    runinfo.write("! Type of the model run:\n")
+    runinfo.write("Run type:              "+sim_type+"\n")
+    runinfo.write("\n")
+    runinfo.write("!***************** Initial conditions *****************!\n")
+    if spinup:
+        runinfo.write("Conditions:            cond\n")
+        dump_date_f = spinup_end.split('/')
+        dump_date_f.reverse()
+        dump_date_f =  ''.join(dump_date_f) # write the dump date in a different (reverse) format
+        runinfo.write("Init cond path:       "+spinup_outputdir_path+"/Dump/\n")
+        runinfo.write("Init file:             Dump_"+pollutant+"_"+dump_date_f+".bin\n")
+    elif run_mode=='cond':
+        cond_year = starttime.split('/')[-1] # extracting year from simulation start time
+        cond_year = str(int(cond_year)-1) # calculation previous year
+        runinfo.write("Conditions:            cond\n")
+        runinfo.write("Init cond path:       "+init_cond_path+"/"+grid_code+"/"+pollutant+"/\n")
+        runinfo.write("Init file:             Dump_"+pollutant+"_"+cond_year+"1231.bin\n")            ## cond option
+    else:
+        runinfo.write("Conditions:            zero\n")
+    runinfo.write("\n")
+    runinfo.write("!************ Switch to climatic mode run *************!\n")
+    runinfo.write("Climatic meteo mode:         no\n")
+    runinfo.write("Climatic meteo year:         2000\n")
+    runinfo.write("\n")
+    runinfo.write("Climatic land cover mode:         no\n")
+    runinfo.write("Climatic land cover year:         2000\n")
+    runinfo.write("\n")
+    if pollutant_groop != 'HM':
+        runinfo.write("Climatic reactants mode:    no\n")
+        runinfo.write("Climatic reactants year:    9999           ! 9999 is a climatic dataset\n")
+        runinfo.write("\n")
+    runinfo.write("!****************** Simulated media *******************!\n")
+    runinfo.write("! Atm - atmosphere\n")
+    runinfo.write("! Soil - soil\n")
+    runinfo.write("! Ocn - ocean\n")
+    runinfo.write("! Veg - vegetation\n")
+    runinfo.write("Number of media:       "+number_media+"\n")
+    runinfo.write("Media ID:              "+media+"\n")
+    runinfo.write("\n")
+    if sim_type=="matrix":
+        runinfo.write("!********* Sources and receptors (matrix run) *********!\n")
+        runinfo.write("\n")
+        runinfo.write("! Anthropogenic sources\n")
+        runinfo.write("Ant sources mode:      all		! choice: all, selected, none\n")
+        runinfo.write("Ant sources number:    14		! for mode 'selected' \n")
+        runinfo.write("Ant sources codes:     DE, AT, BE, CH, CZ, DK, ES, FR, GB, IT, LU, NL, PL, SE      ! for mode 'selected' \n")
+        runinfo.write("\n")
+        runinfo.write("! Natural sources\n")
+        runinfo.write("Nat sources mode:      all		! choice: all, selected, none\n")
+        runinfo.write("Nat sources number:    1 		! for mode 'selected'\n")
+        runinfo.write("Nat sources codes:     NAT		! for mode 'selected'\n")
+        runinfo.write("\n")
+        runinfo.write("! Boundary sources\n")
+        runinfo.write("Bnd sources mode:      all		! choice: all, selected, none\n")
+        runinfo.write("Bnd sources number:    1		! for mode 'selected'\n")
+        runinfo.write("Bnd sources codes:     Bnd		! for mode 'selected'\n")
+        runinfo.write("\n")
+        runinfo.write("! Receptors\n")
+        runinfo.write("Receptors mode:        all		! choice: all, selected, none\n")
+        runinfo.write("Receptors number:      2		! for mode 'selected'\n")
+        runinfo.write("Receptors codes:       GB, RU		! for mode 'selected'\n")
+        runinfo.write("\n")
+        runinfo.write("! Initial conditions\n")
+        runinfo.write("Initial cond mode:     multi		! choice: single, multi\n")
+        runinfo.write("\n")
+        if pollutant_groop == 'HM':
+            runinfo.write("! Re-emission\n")
+            runinfo.write("Re-emission mode:      multi		! choice: single, multi\n")
+            runinfo.write("\n")
+        if pollutant_groop == 'POP':
+            runinfo.write("! Re-emission\n")
+            runinfo.write("Re-emission mode:      single         ! choice: single, multi\n")
+            runinfo.write("\n")
+    runinfo.write("!**************** Meteorological data *****************!\n")
+    runinfo.write("Meteo path:            "+meteo_path+"/\n")
+    runinfo.write("\n")
+    if 'Ocn' in media_list:
+        runinfo.write("!**************** Oceanographic data *****************!\n")
+        runinfo.write("Ocean path:            "+data_path+"/OceanData/\n")
+        runinfo.write("\n")
+    runinfo.write("!****************** Emission data *********************!\n")
+    runinfo.write("Emission path:         "+data_path+"/Emissions/\n")
+    runinfo.write("Emission dataset:      "+emission_dataset+"\n")
+    if pollutant_groop == 'HG':
+        runinfo.write("Natur emis file:       _nat\n")
+    runinfo.write("\n")
+    if reg_simulation:
+        runinfo.write("!**************** Boundary conditions *****************!\n")
+        runinfo.write("Boundary path:         "+bound_cond_path+"/\n")
+        runinfo.write("Boundary file:         _bound_\n")
+        runinfo.write("\n")
+    if pollutant_groop != 'HM':
+        runinfo.write("!************ Atmospheric reactants data **************!\n")
+        runinfo.write("! Needed for Hg and POP simulations\n")
+        runinfo.write("Reactant source:      GEOS_Chem_2x2.5   ! GEOS_Chem_2x2.5/GEOS_Chem_4x5/MOZART  \n")
+        runinfo.write("Reactant path 1:      "+react_path+"/\n")
+        runinfo.write("Ozone conc file:      O3_\n")
+        runinfo.write("S02 conc file:        SO2_\n")
+        runinfo.write("OH conc file:         OH_\n")
+        runinfo.write("Reactant path 2:      "+data_path+"/ReactData/Processed/p-TOMCAT/v_1/\n")
+        runinfo.write("\n")
+    runinfo.write('!**************** Land cover data *********************!\n')
+    runinfo.write('LandCover source:      MODIS_MCD12Q1_v6    ! MODIS_MCD12Q1_v6/MODIS_MOD12\n')
+    runinfo.write('LandCover path:        /home/alex/InputData/LandCover/Processed/\n')
+    runinfo.write('Land Cover file:       LU_\n')
+    runinfo.write('\n')
+    if pollutant_groop == 'HM':
+        runinfo.write("!************** Dust resuspension data ****************!\n")
+        runinfo.write("! Needed for simulations of particulate heavy metals (Pb, Cd etc.) \n")
+        if grid_code == "GLOB_3x3":
+            runinfo.write("Dust data path:       "+data_path+"/Dust_INTERIM/\n")
+        else:
+            runinfo.write("Dust data path:       "+data_path+"/Dust/\n")
+        runinfo.write("Dust file:            dust_\n")
+        runinfo.write("Soil data path:       "+run_dir_path+"/Info/\n")
+        runinfo.write("Soil conc file:       _soil_\n")
+        runinfo.write("\n")
+    runinfo.write("!**************** Configuration files *****************!\n")
+    runinfo.write("Config path:          ./Info/\n")  
+    runinfo.write("Groups file:	       PollutantGroups.dat\n")
+    runinfo.write("Grid config file:      Grid_config_\n")
+    if sim_type=="matrix":
+        runinfo.write("Matrix config file:    _matrix_config_\n")
+    runinfo.write("LC config file:        LC_\n")
+    runinfo.write("Media config file:     _config\n")
+    runinfo.write("Output config file:    ./Info/"+outconfig_main_file+"\n")
+    runinfo.write("\n")
+    runinfo.write("!***************** Common input data ******************!\n")
+    runinfo.write("Geodata path:          "+input_dir+"/GeoData/\n")
+    runinfo.write("Properties path:       ./Info/\n") 
+    if sim_type=="matrix":
+        runinfo.write("Receptors path:        "+input_dir+"/Receptors/\n")
+    runinfo.write("Stations path:         "+input_dir+"/Stations/\n")
+    runinfo.write("Common geophys:        Geophys.dat\n")
+    runinfo.write("Roughness file:        Roughness.dat\n")
+    runinfo.write("Properties file:       _props_"+grid_code+"_\n")
+    runinfo.write("Orography file:        Orography_\n")
+    if sim_type=="matrix":
+        runinfo.write("Receptors file:        Receptors_\n")
+    runinfo.write("Season file:           Seasons_\n")
+    runinfo.write("Stations file:         _stations\n")
+    runinfo.write("FOC file:              OC_\n")
+    if 'Ocn' in media_list:
+        runinfo.write("Ocean topo file:       Ocean_topo_\n")
+        runinfo.write("Ocean fract file:      LC2Ocean.dat\n")
+    if 'Soil' in media_list:
+        runinfo.write("Soil types file:       LC2TS.dat\n")
+    runinfo.write("\n")
+
+# creating "compiler_settings.GLEMOS" file
+with open(run_dir_path+"/build/compiler_settings.GLEMOS", "w") as compiler_set:
+    compiler_set.write("#######################################################\n")
+    compiler_set.write("################ FORTRAN COMPILER #####################\n")
+    compiler_set.write("#######################################################\n")
+    compiler_set.write("\n")
+    compiler_set.write("# Fortran compiler path\n")
+    compiler_set.write("FC = "+fc+"\n")
+    compiler_set.write("\n")
+    compiler_set.write("# Fortran compiler flags\n")
+    compiler_set.write('FFLAGS1 = "-m64 -f77=output -fpp"\n')
+    if pollutant in ('Cd','Pb','Hg'):
+        compiler_set.write('FFLAGS2 = "-c -fast -g -w1 -o"\n')
+        compiler_set.write('#FFLAGS2 = "-c -fast -g -w1 -DDEBUG_MODE -o"\n')
+    else:
+        compiler_set.write('#FFLAGS2 = "-c -fast -g -w1 -DWO_WETDEP -DOCEAN_RUN=0 -C -o"\n')
+        compiler_set.write('FFLAGS2 = "-c -fast -g -w1 -DOCEAN_RUN=0 -C -o"\n')
+        compiler_set.write('#FFLAGS2 = "-c -fast -g -w1 -DDEBUG_MODE -o"\n')
+    compiler_set.write("\n")
+    compiler_set.write("# Linker Libraries and Options\n")
+    compiler_set.write('LDLIBSOPTIONS = "-L'+netcdff_dir+'/fortran/.libs -lnetcdff"\n')
+    compiler_set.write("\n")
+    compiler_set.write("#######################################################\n")
+    compiler_set.write("###################### PATHS ##########################\n")
+    compiler_set.write("#######################################################\n")
+    compiler_set.write("\n")
+    compiler_set.write("# Project Directory\n")
+    compiler_set.write("PRJDIR = "+run_dir_path+"\n")
+    compiler_set.write("\n")
+    compiler_set.write("# Source Directory\n")
+    compiler_set.write("SRCDIR = "+sourse_dir+"\n") #"/src_v"+glemos_version+"\n")
+    compiler_set.write("\n")
+    compiler_set.write("# Scripts Directory\n")
+    compiler_set.write("SCRPTDIR = "+grm_dir+"/scripts\n")  # _v"+glemos_version+"\n")
+    compiler_set.write("\n")
+    compiler_set.write("# Object Directory\n")
+    compiler_set.write("OBJDIR = $PRJDIR/build/objs\n")
+    compiler_set.write("\n")
+    compiler_set.write("# Module Directory\n")
+    compiler_set.write("MODDIR = $PRJDIR/build/mods\n")
+    compiler_set.write("\n")
+    compiler_set.write("# Run Directory\n")
+    compiler_set.write("RUNDIR = $PRJDIR"+"\n")
+    compiler_set.write("\n")
+    compiler_set.write("# NetCDF Source Directory"+"\n")
+    compiler_set.write("NSRCDIR = "+netcdff_dir+"/fortran\n")
+
+############################################################################################
+# COPYING "make.GLEMOS" AND "build_structure.GLEMOS" 
+############################################################################################
+
+makeGLEMOS_path1 = grm_dir+"/scripts/make.GLEMOS"  # _v"+glemos_version+"/make.GLEMOS"
+makeGLEMOS_path2 = run_dir_path+"/make.GLEMOS"
+shutil.copyfile(makeGLEMOS_path1, makeGLEMOS_path2)
+os.chmod(run_dir_path+"/make.GLEMOS", 0o777)
+
+build_str_GLEMOS_path1 = grm_dir+"/scripts/build_structure.GLEMOS"   #  _v"+glemos_version+"/build_structure.GLEMOS"
+build_str_GLEMOS_path2 = run_dir_path+"/build/build_structure.GLEMOS"
+shutil.copyfile(build_str_GLEMOS_path1, build_str_GLEMOS_path2)
+
+############################################################################################
+# COPYING PROPERTIES AND CONFIGURATION FILES
+############################################################################################
+
+# media properties files
+for med in media_list:
+    media_prop_path1 = input_dir+'/Properties/'+med+'_props_'+grid_code+'_'+pollutant+'.dat'
+    media_prop_path2 = run_dir_path+'/Info/'+med+'_props_'+grid_code+'_'+pollutant+'.dat'
+    if os.path.exists(media_prop_path1):
+        shutil.copyfile(media_prop_path1, media_prop_path2)
+    else:
+        print('Error: can not copy property file '+media_prop_path1+', file does not exist.')
+        print('Removing run directory: '+run_dir_path)
+        shutil.rmtree(run_dir_path)
+        sys.exit()
+
+# media config files
+for med in media_list:
+    media_config_path1 = input_dir+'/Config/'+med+'_config.dat'
+    media_config_path2 = run_dir_path+'/Info/'+med+'_config.dat'
+    if os.path.exists(media_config_path1):
+        shutil.copyfile(media_config_path1, media_config_path2)
+    else:
+        print('Error: can not copy configuration file '+media_prop_path1+', file does not exist.')
+        print('Removing run directory: '+run_dir_path)
+        shutil.rmtree(run_dir_path)
+        sys.exit()
+
+# grid config file
+grid_config_path1 = input_dir+'/Config/Grid_config_'+grid_code+'.dat'
+grid_config_path2 = run_dir_path+'/Info/Grid_config_'+grid_code+'.dat'
+if os.path.exists(grid_config_path1):
+    shutil.copyfile(grid_config_path1, grid_config_path2)
+else:
+    print('Error: can not copy configuration file '+media_config_path1+', file does not exist.')
+    print('Removing run directory: '+run_dir_path)
+    shutil.rmtree(run_dir_path)
+    sys.exit()
+
+# LC config file
+lc_config_path1 = input_dir+'/Config/LC_MODIS_MOD12_config.dat'
+lc_config_path2 = run_dir_path+'/Info/LC_MODIS_MOD12_config.dat'
+if os.path.exists(lc_config_path1):
+    shutil.copyfile(lc_config_path1, lc_config_path2)
+else:
+    print('Error: can not copy configuration file '+lc_config_path1+', file does not exist.')
+    print('Removing run directory: '+run_dir_path)
+    shutil.rmtree(run_dir_path)
+    sys.exit()
+
+lc_config_path3 = input_dir+'/Config/LC_MODIS_MCD12Q1_v6_config.dat'
+lc_config_path4 = run_dir_path+'/Info/LC_MODIS_MCD12Q1_v6_config.dat'
+if os.path.exists(lc_config_path3):
+    shutil.copyfile(lc_config_path3, lc_config_path4)
+else:
+    print('Error: can not copy configuration file '+lc_config_path3+', file does not exist.')
+    print('Removing run directory: '+run_dir_path)
+    shutil.rmtree(run_dir_path)
+    sys.exit()
+
+# PollutantGroups
+pg_config_path1 = input_dir+'/Config/PollutantGroups.dat'
+pg_config_path2 = run_dir_path+'/Info/PollutantGroups.dat'
+if os.path.exists(pg_config_path1):
+    shutil.copyfile(pg_config_path1, pg_config_path2)
+else:
+    print('Error: can not copy configuration file '+pg_config_path1+', file does not exist.')
+    print('Removing run directory: '+run_dir_path)
+    shutil.rmtree(run_dir_path)
+    sys.exit()
+
+# Soil conc file
+if pollutant_groop == 'HM':
+    if spinup:
+        date_list = (starttime, endtime, spinup_start, spinup_end)
+    else:
+        date_list = (starttime, endtime)
+    years = set([date.split('/')[2] for date in date_list])
+    for year in years:
+        soil_conc_path1 = input_dir+'/GeoData/'+pollutant+'_soil_'+grid_code+'_'+year+'.dat'
+        soil_conc_path2 = run_dir_path+'/Info/'+pollutant+'_soil_'+grid_code+'_'+year+'.dat'
+        if os.path.exists(soil_conc_path1):
+            shutil.copyfile(soil_conc_path1, soil_conc_path2)
+        else:
+            print('WARNING: can not copy soil concentration file '+soil_conc_path1+', file does not exist.')
+
+# matrix configuration files
+if sim_type == 'matrix':
+    matrix_conf_path1 = input_dir+'/Config/'+pollutant_groop+'_matrix_config_'+grid_code+'.dat'
+    matrix_conf_path2 = run_dir_path+'/Info/'+pollutant_groop+'_matrix_config_'+grid_code+'.dat'
+    
+    if os.path.exists(matrix_conf_path1):
+        shutil.copyfile(matrix_conf_path1, matrix_conf_path2)
+    else:
+        print('Error: can not copy matrix config file '+matrix_conf_path1+', file does not exist.')
+        print('Removing run directory: '+run_dir_path)
+        shutil.rmtree(run_dir_path)
+        sys.exit()
+
+print('*****************************************************************************************')

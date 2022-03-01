@@ -1,0 +1,482 @@
+i#!/bin/csh -f
+
+#set echo
+
+# setting names of the main files
+set GLEMOS_FILE=glemos
+set RUNINFO=./RunInfo.dat
+set RUNINFO_SPINUP=./Info/RunInfo.dat.spinup
+set OUTCONF_SPINUP=./Info/Output_config.dat.spinup
+set RUNINFO_MAIN=./Info/RunInfo.dat.main
+set OUTCONF_MAIN=./Info/Output_config.dat.main
+set OUTDIR_SPINUP=./Output_dir_spinup
+set OUTDIR_MAIN=./Output_dir_main
+
+# creating output main and spinup directory subdirectories
+
+if ( -e $RUNINFO_SPINUP ) then
+	set RUNINFO_ARRAY = ( $RUNINFO_SPINUP $RUNINFO_MAIN )
+	set OUTCONF_ARRAY = ( $OUTCONF_SPINUP $OUTCONF_MAIN )
+	set OUTDIR_ARRAY = ( $OUTDIR_SPINUP $OUTDIR_MAIN )
+	set ARRAY_LEN = 2
+else
+        set RUNINFO_ARRAY = ( $RUNINFO_MAIN )
+        set OUTCONF_ARRAY = ( $OUTCONF_MAIN )
+        set OUTDIR_ARRAY = ( $OUTDIR_MAIN )
+        set ARRAY_LEN = 1
+endif
+
+# loop
+set i = 1
+while ( $i <= $ARRAY_LEN )
+
+	set RunInfo = $RUNINFO_ARRAY[$i]
+	set OutputConf = $OUTCONF_ARRAY[$i]
+        set OutputDir = $OUTDIR_ARRAY[$i]	
+
+	# reading start date
+	set str = `grep '^Start' $RunInfo`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set str = `expr substr "$str" $start $leng`
+	set str = `echo $str | tr / " "`
+	set dateStart=($str)
+	
+	# reading finish date
+	set str = `grep '^Finish' $RunInfo`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set str = `expr substr "$str" $start $leng`
+	set str = `echo $str | tr / " "`
+	set dateFinish=($str)
+	
+	# Reading Run type
+	set str = `grep '^Run type' $RunInfo`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set RunType = `expr substr "$str" $start $leng`
+	switch($RunType)
+  	  case field
+    	    set Matrix = 0
+    	  breaksw
+  	  case matrix
+    	    set Matrix = 1
+    	  breaksw
+	endsw
+
+	# Reading number of media
+	set str = `grep '^Number of media' $RunInfo`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set NumMedia = `expr substr "$str" $start $leng`
+	
+	# Reading list of media
+	set str = `grep '^Media ID' $RunInfo`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set str = `expr substr "$str" $start $leng`
+	set str2 = `echo $str | tr , " "`
+	set Media=($str2)
+
+	# Reading name of output sunbdirectories
+	set str = `grep '^Monitor Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set MonitorDir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^Dump Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set DumpDir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^Balance Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set BalanceDir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^Matrix Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set MatrixDir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^Fields Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set FieldsDir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^Fields NCF Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set NCFdir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^Yearly Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set YearlyDir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^Monthly Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set MonthlyDir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^Daily Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set DailyDir = `expr substr "$str" $start $leng`
+
+	set str = `grep '^6hourly Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set PeriodDir = `expr substr "$str" $start $leng`
+	
+	set str = `grep '^Hourly Dir' $OutputConf`
+	set pos = `expr index "$str" :`
+	@ start = $pos + 1
+	set lengStr = `expr length "$str"`
+	@ leng = $lengStr + 1 - $start
+	set HourlyDir = `expr substr "$str" $start $leng`	
+
+	#mkdir $OutputDir
+	mkdir $OutputDir'/'$DumpDir
+	mkdir $OutputDir'/'$BalanceDir
+	
+	# Defining output time scales
+	set med = 1
+	while ( $med <= $NumMedia ) 
+
+	  set str = `grep '^'$Media[$med]' Monitor Hourly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set MonitorHourly = 1
+	      breaksw
+	    case off
+	      set MonitorHourly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Monitor 6hourly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set Monitor6hourly = 1
+	      breaksw
+	    case off
+	      set Monitor6hourly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Monitor Daily' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set MonitorDaily = 1
+	      breaksw
+	    case off
+	      set MonitorDaily = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Monitor Monthly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set MonitorMonthly = 1
+	      breaksw
+	    case off
+	      set MonitorMonthly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Monitor Yearly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set MonitorYearly = 1
+	      breaksw
+	    case off
+	      set MonitorYearly = 0
+	      breaksw
+	  endsw
+	
+	  set str = `grep '^'$Media[$med]' Fields Hourly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set FieldsHourly = 1
+	      breaksw
+	    case off
+	      set FieldsHourly = 0
+	      breaksw
+	  endsw
+	
+	  set str = `grep '^'$Media[$med]' Fields 6hourly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set Fields6hourly = 1
+	      breaksw
+	    case off
+	      set Fields6hourly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Fields Daily' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set FieldsDaily = 1
+	      breaksw
+	    case off
+	      set FieldsDaily = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Fields Monthly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set FieldsMonthly = 1
+	      breaksw
+	    case off
+	      set FieldsMonthly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Fields Yearly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set FieldsYearly = 1
+	      breaksw
+	    case off
+	      set FieldsYearly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' NCF Hourly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set NCFhourly = 1
+	      breaksw
+	    case off
+	      set NCFhourly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' NCF 6hourly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set NCF6hourly = 1
+	      breaksw
+	    case off
+	      set NCF6hourly = 0
+	      breaksw
+	  endsw
+	
+	  set str = `grep '^'$Media[$med]' NCF Daily' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set NCFdaily = 1
+	      breaksw
+	    case off
+	      set NCFdaily = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' NCF Monthly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set NCFmonthly = 1
+	      breaksw
+	    case off
+	      set NCFmonthly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' NCF Yearly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set NCFyearly = 1
+	      breaksw
+	    case off
+	      set NCFyearly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Matrix Daily' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	     set MatrixDaily = 1
+	      breaksw
+	    case off
+	      set MatrixDaily = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Matrix Monthly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set MatrixMonthly = 1
+	      breaksw
+	    case off
+	      set MatrixMonthly = 0
+	      breaksw
+	  endsw
+
+	  set str = `grep '^'$Media[$med]' Matrix Yearly' $OutputConf`
+	  set pos = `expr index "$str" :`
+	  @ start = $pos + 1
+	  set lengStr = `expr length "$str"`
+	  @ leng = $lengStr + 1 - $start
+	  set str = `expr substr "$str" $start $leng`
+	  switch($str)
+	    case on
+	      set MatrixYearly = 1
+	      breaksw
+	    case off
+	      set MatrixYearly = 0
+	      breaksw
+	  endsw
+	
+	# Creating output directories
+  	  mkdir $OutputDir'/'$Media[$med]
+	  mkdir $OutputDir'/'$Media[$med]'/'$MonitorDir
+	  mkdir $OutputDir'/'$Media[$med]'/'$FieldsDir
+	  mkdir $OutputDir'/'$Media[$med]'/'$NCFdir
+
+	  if ( $MonitorHourly ) mkdir $OutputDir'/'$Media[$med]'/'$MonitorDir'/'$HourlyDir
+	  if ( $Monitor6hourly ) mkdir $OutputDir'/'$Media[$med]'/'$MonitorDir'/'$PeriodDir
+	  if ( $MonitorDaily ) mkdir $OutputDir'/'$Media[$med]'/'$MonitorDir'/'$DailyDir
+	  if ( $MonitorMonthly ) mkdir $OutputDir'/'$Media[$med]'/'$MonitorDir'/'$MonthlyDir
+	  if ( $MonitorYearly ) mkdir $OutputDir'/'$Media[$med]'/'$MonitorDir'/'$YearlyDir
+
+	  if ( $FieldsHourly ) mkdir $OutputDir'/'$Media[$med]'/'$FieldsDir'/'$HourlyDir
+	  if ( $Fields6hourly ) mkdir $OutputDir'/'$Media[$med]'/'$FieldsDir'/'$PeriodDir
+	  if ( $FieldsDaily ) mkdir $OutputDir'/'$Media[$med]'/'$FieldsDir'/'$DailyDir
+	  if ( $FieldsMonthly ) mkdir $OutputDir'/'$Media[$med]'/'$FieldsDir'/'$MonthlyDir
+	  if ( $FieldsYearly ) mkdir $OutputDir'/'$Media[$med]'/'$FieldsDir'/'$YearlyDir
+
+	  if ( $NCFhourly ) mkdir $OutputDir'/'$Media[$med]'/'$NCFdir'/'$HourlyDir
+	  if ( $NCF6hourly ) mkdir $OutputDir'/'$Media[$med]'/'$NCFdir'/'$PeriodDir
+	  if ( $NCFdaily ) mkdir $OutputDir'/'$Media[$med]'/'$NCFdir'/'$DailyDir
+	  if ( $NCFmonthly ) mkdir $OutputDir'/'$Media[$med]'/'$NCFdir'/'$MonthlyDir
+	  if ( $NCFyearly ) mkdir $OutputDir'/'$Media[$med]'/'$NCFdir'/'$YearlyDir
+
+	  if ( $Matrix ) then
+	    mkdir $OutputDir'/'$Media[$med]'/'$MatrixDir
+
+	    if ( $MatrixDaily ) mkdir $OutputDir'/'$Media[$med]'/'$MatrixDir'/'$DailyDir
+	    if ( $MatrixMonthly ) mkdir $OutputDir'/'$Media[$med]'/'$MatrixDir'/'$MonthlyDir
+	    if ( $MatrixYearly ) mkdir $OutputDir'/'$Media[$med]'/'$MatrixDir'/'$YearlyDir
+	  endif
+
+	  @ med++
+	end
+	@ i++
+end

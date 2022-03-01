@@ -1,0 +1,472 @@
+#!/bin/csh -f
+
+#################################################
+# A script creating makefile for GLEMOS 
+# compilation and building
+# (c) Oleg Travnikov, MSC-E, 2016
+# (c) Mikhail Kleimenov, MSC-E, 2021
+#################################################
+
+set RunInfo = ./Info/RunInfo.dat.main
+set fileCompiler = ./build/compiler_settings.GLEMOS
+set fileBuild = ./build/build_structure.GLEMOS
+
+set Cfile = tmp.GLEMOS
+set Cfile2 = tmp2.GLEMOS
+
+set grid = '#!'
+echo $grid'/bin/csh -f'                                          > $Cfile
+
+#################################################
+# Reading compiler settings
+#################################################
+
+set str = `grep '^FC' $fileCompiler`
+echo ' set' $str                                                >> $Cfile
+set str = `grep '^FFLAGS1' $fileCompiler`
+echo ' set' $str                                                >> $Cfile
+set str = `grep '^FFLAGS2' $fileCompiler`
+echo ' set' $str                                                >> $Cfile
+set str = `grep '^LDLIBSOPTIONS' $fileCompiler`
+echo ' set' $str                                                >> $Cfile
+echo                                                            >> $Cfile
+
+#################################################
+# Reading & writing paths
+#################################################
+
+# Project path
+set str = `grep '^PRJDIR' $fileCompiler`
+echo ' set' $str                                                >> $Cfile
+set pos = `expr index "$str" =`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start 
+set PRJDIR = `expr substr "$str" $start $leng`
+
+# Model run path
+set str = `grep '^RUNDIR' $fileCompiler`
+echo ' set' $str                                                >> $Cfile
+set pos = `expr index "$str" =`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set RUNDIR = `expr substr "$str" $start $leng`
+
+set pos = `expr index "$RUNDIR" '$'`
+if ( $pos > 0 ) then
+  @ start = $pos + 7
+  set lengStr = `expr length "$RUNDIR"`
+  @ leng = $lengStr + 1 - $start
+  set RUNDIR = `expr substr "$RUNDIR" $start $leng`
+  set RUNDIR = $PRJDIR$RUNDIR
+endif
+#set RunInfo = $RUNDIR'/'$RunInfo
+
+# Source path
+set str = `grep '^SRCDIR' $fileCompiler`
+echo ' set' $str                                                >> $Cfile
+
+# Object path
+set str = `grep '^OBJDIR' $fileCompiler`
+echo ' set' $str                                                >> $Cfile
+set pos = `expr index "$str" =`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set OBJDIR = `expr substr "$str" $start $leng`
+
+set pos = `expr index "$OBJDIR" /`
+@ leng = $pos - 1
+set str = `expr substr "$OBJDIR" 1 $leng`
+if($str == '$PRJDIR') then
+  @ start = $pos
+  set lengStr = `expr length "$OBJDIR"`
+  @ leng = $lengStr + 1 - $start
+  set OBJDIR = `expr substr "$OBJDIR" $start $leng`
+  set OBJDIR = $PRJDIR$OBJDIR
+endif
+mkdir -p $OBJDIR
+mkdir -p $OBJDIR/ncf
+
+# Modules path
+set str = `grep '^MODDIR' $fileCompiler`
+echo ' set' $str                                                >> $Cfile
+set pos = `expr index "$str" =`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set MODDIR = `expr substr "$str" $start $leng`
+
+set pos = `expr index "$MODDIR" /`
+@ leng = $pos - 1
+set str = `expr substr "$MODDIR" 1 $leng`
+if($str == '$PRJDIR') then
+  @ start = $pos
+  set lengStr = `expr length "$MODDIR"`
+  @ leng = $lengStr + 1 - $start
+  set MODDIR = `expr substr "$MODDIR" $start $leng`
+  set MODDIR = $PRJDIR$MODDIR
+endif
+mkdir -p $MODDIR
+
+# NetCDF path
+set str = `grep '^NSRCDIR' $fileCompiler`
+echo ' set' $str                                                >> $Cfile
+echo                                                            >> $Cfile
+
+# Configuration path
+set str = `grep 'Config path' $RunInfo`
+set pos = `expr index "$str" :`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set pathConfig = `expr substr "$str" $start $leng`
+
+# Checking for relative path
+set fstSymb = `expr substr "$pathConfig" 1 1`
+if($fstSymb'&' == '.&') then
+  set leng = `expr length "$pathConfig"`
+  set pos = `expr index "$pathConfig" /`
+  @ leng = $leng + 1 - $pos
+  set pathConfig = `expr substr "$pathConfig" $pos $leng`
+  set pathConfig = `echo $PRJDIR$pathConfig`
+endif
+
+#################################################
+# Reading & writing parameters
+#################################################
+
+# Reading number of pollutants
+set str = `grep '^Pollutants number' $RunInfo`
+set pos = `expr index "$str" :`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set NumSubs = `expr substr "$str" $start $leng`
+
+# Reading list of pollutants
+set str = `grep '^Pollutants ID' $RunInfo`
+set pos = `expr index "$str" :`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set str = `expr substr "$str" $start $leng`
+set str2 = `echo $str | tr , " "`
+
+# Checking the number of pollutants
+set lengStr = `expr length "$str"`
+set n = 1
+set pos = `expr index "$str" ,`
+while ( $pos > 0 )
+  @ start = $pos + 1
+  @ leng = $lengStr + 1 - $start
+  set str = `expr substr "$str" $start $leng`
+  set pos = `expr index "$str" ,`
+  @ n++
+end
+if ($n != $NumSubs) then
+  echo 'STOP: Wrong pollutants number ('$NumSubs'):' $str2
+  exit
+endif
+
+# Defining pollutants
+set Subs=($str2)
+
+# Reading name of pollutant groups file
+set str = `grep '^Groups file' $RunInfo`
+set pos = `expr index "$str" :`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set fileGroups = `expr substr "$str" $start $leng`
+set fileGroups = $pathConfig$fileGroups
+
+# Reading pollutant groups definition
+set n = 1
+set str2 = ''
+while ( $n <= $NumSubs )
+  set str = `grep $Subs[$n] $fileGroups`
+  set pos = `expr index "$str" :`
+  if ($pos <= 0) then
+    echo 'STOP: Unknown pollutant:' $Subs[$n]
+    exit
+  endif
+  @ leng = $pos - 1
+  set Group = `expr substr "$str" 1 $leng`
+  set str2 = `echo $str2 $Group `
+  @ n++
+end
+
+# Check for repeating groups
+set Groups=($str2)
+set NumGroups = 1
+set str2 = $Groups[1]
+set n = 2
+while ( $n <= $NumSubs )
+  @ n1 = $n - 1
+  if($Groups[$n] != $Groups[$n1]) then
+    set str2 = `echo $str2 $Groups[$n] `
+    @ NumGroups++
+  endif
+  @ n++
+end
+
+# Identification of pollutant groups
+set Groups=($str2)
+echo ' set NumGroups = '$NumGroups                              >> $Cfile
+echo ' set Groups = ('$str2')'                                  >> $Cfile
+echo                                                            >> $Cfile
+
+# Reading number of media
+set str = `grep '^Number of media' $RunInfo`
+set pos = `expr index "$str" :`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set NumMedia = `expr substr "$str" $start $leng`
+
+# Reading list of media
+set str = `grep '^Media ID' $RunInfo`
+set pos = `expr index "$str" :`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set str = `expr substr "$str" $start $leng`
+set str = `echo $str | tr a-z A-Z`
+set str2 = `echo $str | tr , " "`
+
+# Checking the number of media
+set lengStr = `expr length "$str"`
+set n = 1
+set pos = `expr index "$str" ,`
+while ( $pos > 0 )
+  @ start = $pos + 1
+  @ leng = $lengStr + 1 - $start
+  set str = `expr substr "$str" $start $leng`
+  set pos = `expr index "$str" ,`
+  @ n++
+end
+if ($n != $NumMedia) then
+  echo 'STOP: Wrong number of media ('$NumMedia'):' $str2
+  exit
+endif
+
+# Defining media
+set Media=($str2)
+echo ' set NumMedia = '$NumMedia                                >> $Cfile
+echo ' set Media = ('$str2')'                                   >> $Cfile
+echo                                                            >> $Cfile
+
+# Reading Run type
+set str = `grep '^Run type' $RunInfo`
+set pos = `expr index "$str" :`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set RunType = `expr substr "$str" $start $leng`
+switch($RunType)
+  case field
+    echo ' set' 'RTYPE = 1'                                     >> $Cfile
+    breaksw
+  case matrix
+    echo ' set' 'RTYPE = 2'                                     >> $Cfile
+    breaksw
+  default
+    echo 'STOP: Unknown Run type - "'$RunType\"
+    exit
+endsw
+
+# Reading model grid code
+set str = `grep '^Grid code' $RunInfo`
+set pos = `expr index "$str" :`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set GridCode = `expr substr "$str" $start $leng`
+
+# Reading name of Grid Config file
+set str = `grep '^Grid config file' $RunInfo`
+set pos = `expr index "$str" :`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set fileGrid = `expr substr "$str" $start $leng`
+set fileGrid = $pathConfig$fileGrid$GridCode'.dat'
+
+# Checking Grid code in Grid Config file
+set str = `grep '^Grid code' $fileGrid`
+set pos = `expr index "$str" :`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set GridCode2 = `expr substr "$str" $start $leng`
+if ($GridCode2 != $GridCode) then
+  echo 'STOP: Wrong grid code - "'$GridCode2\"
+  exit
+endif
+
+# Reading projection type
+set str = `grep '^Projection type' $fileGrid`
+set pos = `expr index "$str" :`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set ProjType = `expr substr "$str" $start $leng`
+switch($ProjType)
+  case latlon
+    echo ' set' 'PROJTYPE = 1'                                  >> $Cfile
+    breaksw
+  case polar
+    echo ' set' 'PROJTYPE = 2'                                  >> $Cfile
+    breaksw
+  default
+    echo 'STOP: Unknown projection type - "'$ProjType\"
+    exit
+endsw
+
+# Reading region type
+set str = `grep '^Region type' $fileGrid`
+set pos = `expr index "$str" :`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set RegType = `expr substr "$str" $start $leng`
+switch($RegType)
+  case global
+    echo ' set' 'REGTYPE = 1'                                   >> $Cfile
+    breaksw
+  case regional
+    echo ' set' 'REGTYPE = 2'                                   >> $Cfile
+    breaksw
+  default
+    echo 'STOP: Unknown region type - "'$RegType\"
+    exit
+endsw
+
+# Reading grid resolution
+#set str = `grep '^Grid resolution' $fileGrid`
+#set pos = `expr index "$str" :`
+#@ start = $pos + 1
+#set lengStr = `expr length "$str"`
+#@ leng = $lengStr + 1 - $start
+#set str = `expr substr "$str" $start $leng`
+#set pos = `expr index "$str" ,`
+#set lengStr = `expr length "$str"`
+#@ leng = $pos - 1
+#set ResolLon = `expr substr "$str" 1 $leng`
+#@ start = $pos + 1
+#set ResolLat = `expr substr "$str" $start $lengStr`
+#echo ' set' 'RESOLLON =' $ResolLon                              >> $Cfile
+#echo ' set' 'RESOLLAT =' $ResolLat                              >> $Cfile
+
+# Reading grid size
+set str = `grep '^Grid size' $fileGrid`
+set pos = `expr index "$str" :`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set str = `expr substr "$str" $start $leng`
+set pos = `expr index "$str" ,`
+set lengStr = `expr length "$str"`
+@ leng = $pos - 1
+set SizeLon = `expr substr "$str" 1 $leng`
+@ start = $pos + 1
+set SizeLat = `expr substr "$str" $start $lengStr`
+echo ' set' 'GRIDIMAX =' $SizeLon                               >> $Cfile
+echo ' set' 'GRIDJMAX =' $SizeLat                               >> $Cfile
+
+# Reading minimum grid step
+#set str = `grep '^Min step' $fileGrid`
+#set pos = `expr index "$str" :`
+#@ start = $pos + 1
+#set lengStr = `expr length "$str"`
+#@ leng = $lengStr + 1 - $start
+#set MinStep = `expr substr "$str" $start $leng`
+#echo ' set' 'MINSTEP =' $MinStep                                 >> $Cfile
+
+# Reading name of media configuration files
+set str = `grep '^Media config file' $RunInfo`
+set pos = `expr index "$str" :`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set fileMedia = `expr substr "$str" $start $leng`
+
+# Defining atmospheric configuration file name
+set fileAtm = $pathConfig'Atm'$fileMedia'.dat'
+
+# Reading number of atmospheric layers
+set str = `grep '^Number of layers' $fileAtm`
+set pos = `expr index "$str" :`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set NumLayers = `expr substr "$str" $start $leng`
+echo ' set' 'KMAX =' $NumLayers                                 >> $Cfile
+
+# Reading source of vertical wind velocity
+set str = `grep '^Vertical velocity' $fileAtm`
+set pos = `expr index "$str" :`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set VertType = `expr substr "$str" $start $leng`
+switch($VertType)
+  case calc
+    echo ' set' 'VTYPE = 1'                                     >> $Cfile
+    breaksw
+  case driver
+    echo ' set' 'VTYPE = 2'                                     >> $Cfile
+    breaksw
+  default
+    echo 'STOP: Unknown type of vertical velocity source - "'$VertType\"
+    exit
+endsw
+echo                                                            >> $Cfile
+
+#################################################
+# Creating Makefile
+#################################################
+
+cat $Cfile $fileBuild > $Cfile2
+chmod 777 $Cfile2     
+
+rm -f /makefile
+
+./$Cfile2
+
+rm $Cfile
+rm $Cfile2
+
+if ( $1 == '' ) then
+  make
+else
+  make $1
+endif
+
+#################################################
+# Copying run.GLEMOS
+#################################################
+
+# SCRIPTS path
+set str = `grep '^SCRPTDIR' $fileCompiler`
+set pos = `expr index "$str" =`
+@ start = $pos + 1
+set lengStr = `expr length "$str"`
+@ leng = $lengStr + 1 - $start
+set SCRPTDIR = `expr substr "$str" $start $leng`
+
+# Copying
+
+# Checing if the model was compiled
+if ( -e ./glemos ) then
+     cp ${SCRPTDIR}/run.GLEMOS ${RUNDIR}/run.GLEMOS
+     chmod 777 ${RUNDIR}/run.GLEMOS
+#    echo 'File "glemos" is missing in the run directory. You should run the "make.GLEMOS" script first to compile the model and create this file.'
+#    exit 0
+endif
+
+#cp ${SCRPTDIR}/run.GLEMOS ${RUNDIR}/run.GLEMOS
+#chmod 777 ${RUNDIR}/run.GLEMOS
+

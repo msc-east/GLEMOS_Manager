@@ -1,0 +1,505 @@
+#######################################################
+# Build structure of GLEMOS 
+# (c) Valeri Sokovykh, MSC-E, 2014
+# (c) Oleg Travnikov, MSC-E, 2016
+#######################################################
+
+ set Cfile = makefile
+ set dollar = '$'
+
+# Defining pollutant groups
+ set HM = 0
+ set HG = 0
+ set POP = 0
+ set AERO = 0
+ set TRACER = 0
+
+ set n = 1
+ while ( $n <= $NumGroups )
+   switch($Groups[$n])
+     case HM
+       set HM = 1
+       breaksw
+     case HG
+       set HG = 1
+       breaksw
+     case POP
+       set POP = 1
+       breaksw
+     case AERO
+       set AERO = 1
+       breaksw
+     case TRACER
+       set TRACER = 1
+       breaksw
+   endsw
+   @ n++
+ end
+
+# Defining madia
+ set ATM = 0
+ set OCN = 0
+ set SOIL = 0
+ set VEG = 0
+
+ set n = 1
+ while ( $n <= $NumMedia )
+   switch($Media[$n])
+     case ATM
+       set ATM = 1
+       breaksw
+     case OCN
+       set OCN = 1
+       breaksw
+     case SOIL
+       set SOIL = 1
+       breaksw
+     case VEG
+       set VEG = 1
+       breaksw
+   endsw
+   @ n++
+ end
+
+# Writing compiler parameters to a temporal file
+ echo                                                               > $Cfile
+ echo "FC = $FC"                                                   >> $Cfile
+ echo                                                              >> $Cfile
+ echo "FFLAGS1 = $FFLAGS1"                                         >> $Cfile
+ echo "FFLAGS2 = $FFLAGS2"                                         >> $Cfile
+ echo "FFLAGSMOD = \"                                              >> $Cfile
+ set n = 1
+ while($n <= $NumGroups)
+   echo "            -DG_$Groups[$n] \"                           >> $Cfile
+   @ n++
+ end
+ set n = 1
+ while($n <= $NumMedia)
+   echo "            -DM_$Media[$n] \"                            >> $Cfile
+   @ n++
+ end
+ echo "            -DRTYPE=$RTYPE \"                               >> $Cfile  
+ echo "            -DPROJTYPE=$PROJTYPE \"                         >> $Cfile  
+ echo "            -DREGTYPE=$REGTYPE \"                           >> $Cfile  
+ echo "            -DGRIDIMAX=$GRIDIMAX \"                         >> $Cfile  
+ echo "            -DGRIDJMAX=$GRIDJMAX \"                         >> $Cfile  
+ #echo "            -DSPRESLON=$RESOLLON \"                         >> $Cfile  
+ #echo "            -DSPRESLAT=$RESOLLAT \"                         >> $Cfile  
+ echo "            -DA_KMAX=$KMAX \"                               >> $Cfile  
+ echo "            -DA_VTYPE=$VTYPE"                               >> $Cfile  
+ echo "FFLAGS = $dollar(FFLAGS1) -moddir=$dollar(MODDIR) $dollar(FFLAGSMOD) $dollar(FFLAGS2)"        >> $Cfile
+ echo                                                              >> $Cfile
+ echo "LDLIBSOPTIONS = $LDLIBSOPTIONS"                             >> $Cfile  
+ echo                                                              >> $Cfile
+ echo "SRCDIR =  $SRCDIR"                                          >> $Cfile  
+ echo "OBJDIR =  $OBJDIR"                                          >> $Cfile  
+ echo "MODDIR =  $MODDIR"                                          >> $Cfile  
+ echo "RUNDIR =  $RUNDIR"                                          >> $Cfile  
+ echo "NSRCDIR = $NSRCDIR"                                         >> $Cfile  
+ echo                                                              >> $Cfile
+
+################## Definition of objetive files ####################
+
+ echo "OBJS = \"                                                   >> $Cfile
+ 
+# Common modules
+ echo "  $dollar(OBJDIR)/ncf/typeSizes.o \"                        >> $Cfile  
+ echo "  $dollar(OBJDIR)/ncf/netcdf.o \"                           >> $Cfile  
+ echo "  $dollar(OBJDIR)/GeneralParams.o \"                        >> $Cfile  
+ echo "  $dollar(OBJDIR)/Geometry.o \"                             >> $Cfile  
+ 
+# Atmospheric parameters modules
+ echo "  $dollar(OBJDIR)/Atm_Params.o \"                           >> $Cfile  
+ if ($POP) then
+   echo "  $dollar(OBJDIR)/Atm_POP_Params.o \"                     >> $Cfile  
+ endif
+ if ($AERO) then
+   echo "  $dollar(OBJDIR)/Atm_AERO_Params.o \"                    >> $Cfile  
+ endif
+ if ($HG) then
+   echo "  $dollar(OBJDIR)/Atm_HG_Params.o \"                      >> $Cfile  
+ endif
+ if ($HM) then
+   echo "  $dollar(OBJDIR)/Atm_HM_Params.o \"                      >> $Cfile  
+ endif
+
+# Soil parameters modules
+ if ($SOIL) then
+   if ($POP) then
+     echo "  $dollar(OBJDIR)/Soil_POP_Params.o \"                  >> $Cfile  
+   endif
+   echo "  $dollar(OBJDIR)/Soil_Params.o \"                        >> $Cfile  
+ endif
+
+# Vegetation parameters modules
+ if ($VEG) then
+   if ($POP) then
+     echo "  $dollar(OBJDIR)/Veg_POP_Params.o \"                   >> $Cfile  
+   endif 
+   echo "  $dollar(OBJDIR)/Veg_Params.o \"                         >> $Cfile  
+ endif
+
+# Ocean parameters modules
+ if ($OCN) then
+   if ($POP) then 
+     echo "  $dollar(OBJDIR)/Ocn_POP_Params.o \"                   >> $Cfile  
+   endif
+   echo "  $dollar(OBJDIR)/Ocn_Params.o \"                         >> $Cfile  
+ endif
+
+# Exchange parameters module
+ echo "  $dollar(OBJDIR)/Exch_Params.o \"                          >> $Cfile 
+
+# Atmospheric common modules 
+ echo "  $dollar(OBJDIR)/Atm_Diffusion.o \"                        >> $Cfile  
+ echo "  $dollar(OBJDIR)/Atm_HorizAdvect.o \"                      >> $Cfile  
+ echo "  $dollar(OBJDIR)/Atm_VertAdvect.o \"                       >> $Cfile  
+
+# Atmospheric pollutant groups specific modules
+ if ($POP) then
+   echo "  $dollar(OBJDIR)/Atm_POP_General.o \"                    >> $Cfile 
+ endif 
+ if ($AERO) then
+   echo "  $dollar(OBJDIR)/Atm_AERO_Chemistry.o \"                 >> $Cfile 
+   echo "  $dollar(OBJDIR)/Atm_AERO_General.o \"                   >> $Cfile 
+ endif 
+ if ($HG) then
+   echo "  $dollar(OBJDIR)/Atm_HG_Chemistry.o \"                   >> $Cfile 
+   echo "  $dollar(OBJDIR)/Atm_HG_General.o \"                     >> $Cfile 
+ endif 
+ if ($HM) then
+   echo "  $dollar(OBJDIR)/Atm_HM_General.o \"                     >> $Cfile 
+ endif 
+
+# Atmospheric exchange module
+ echo "  $dollar(OBJDIR)/Atm_Exchange.o \"                         >> $Cfile  
+
+# Soil modules
+ if ($SOIL) then
+   if ($POP) then
+     echo "  $dollar(OBJDIR)/Soil_POP_General.o \"                 >> $Cfile  
+   endif
+ endif
+
+# Vegetation modules
+ if ($VEG) then
+   if ($POP) then
+     echo "  $dollar(OBJDIR)/Veg_POP_General.o \"                  >> $Cfile  
+   endif
+ endif
+
+# Ocean modules
+ if ($OCN) then
+   echo "  $dollar(OBJDIR)/Ocn_AdvDiff.o \"                        >> $Cfile  
+
+   if ($POP) then 
+     echo "  $dollar(OBJDIR)/Ocn_POP_General.o \"                  >> $Cfile  
+   endif
+ endif
+
+# Input & output modules
+ echo "  $dollar(OBJDIR)/OutputBalance.o \"                        >> $Cfile  
+ echo "  $dollar(OBJDIR)/OutputGeneral.o \"                        >> $Cfile  
+ echo "  $dollar(OBJDIR)/OutputTxtProcs.o \"                       >> $Cfile  
+ echo "  $dollar(OBJDIR)/Atm_NcfOutput.o \"                        >> $Cfile  
+ echo "  $dollar(OBJDIR)/Atm_Output.o \"                           >> $Cfile  
+ echo "  $dollar(OBJDIR)/Atm_Input.o \"                            >> $Cfile  
+ if ($SOIL) then
+   echo "  $dollar(OBJDIR)/Soil_Output.o \"                        >> $Cfile  
+   echo "  $dollar(OBJDIR)/Soil_Input.o \"                         >> $Cfile  
+ endif
+ if ($VEG) then
+   echo "  $dollar(OBJDIR)/Veg_Output.o \"                         >> $Cfile  
+   echo "  $dollar(OBJDIR)/Veg_Input.o \"                          >> $Cfile  
+ endif
+ if ($OCN) then
+   echo "  $dollar(OBJDIR)/Ocn_Output.o \"                         >> $Cfile  
+   echo "  $dollar(OBJDIR)/Ocn_Input.o \"                          >> $Cfile 
+ endif 
+ 
+# Media general modules
+ echo "  $dollar(OBJDIR)/Atm_General.o \"                          >> $Cfile  
+ if ($SOIL) then
+   echo "  $dollar(OBJDIR)/Soil_General.o \"                       >> $Cfile  
+ endif
+ if ($VEG) then
+   echo "  $dollar(OBJDIR)/Veg_General.o \"                        >> $Cfile  
+ endif
+ if ($OCN) then
+   echo "  $dollar(OBJDIR)/Ocn_General.o \"                        >> $Cfile  
+ endif
+
+# Exchange general modules
+ if ($POP) then 
+   echo "  $dollar(OBJDIR)/Exch_General_POP.o \"                   >> $Cfile  
+ endif
+ if ($HG) then 
+   echo "  $dollar(OBJDIR)/Exch_General.o \"                       >> $Cfile  
+ endif
+ if ($HM) then 
+   echo "  $dollar(OBJDIR)/Exch_General.o \"                       >> $Cfile  
+ endif
+
+# General procedures module
+ echo "  $dollar(OBJDIR)/GeneralProcs.o \"                         >> $Cfile  
+
+# The main program
+ echo "  $dollar(OBJDIR)/MainProg.o"                               >> $Cfile  
+ echo                                                              >> $Cfile
+
+###################### Compilation ######################
+
+ echo "  $dollar(RUNDIR)/glemos: $dollar(OBJS)"                                                                 	>> $Cfile
+ echo "	$dollar(FC) -o $dollar(RUNDIR)/glemos $dollar(OBJS) $dollar{LDLIBSOPTIONS}"                             	>> $Cfile  
+ echo                                                                                                           	>> $Cfile
+
+# Common modules
+ echo "  $dollar(OBJDIR)/ncf/typeSizes.o: $dollar(NSRCDIR)/typeSizes.f90"                                       	>> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/ncf/typeSizes.o $dollar(NSRCDIR)/typeSizes.f90"             	>> $Cfile  
+ echo                                                                                                           	>> $Cfile
+ echo "  $dollar(OBJDIR)/ncf/netcdf.o: $dollar(NSRCDIR)/netcdf.f90"                                             	>> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/ncf/netcdf.o $dollar(NSRCDIR)/netcdf.f90"                   	>> $Cfile  
+ echo                                                                                                           	>> $Cfile
+ echo "  $dollar(OBJDIR)/GeneralParams.o: $dollar(SRCDIR)/GeneralParams.f95"                                    	>> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/GeneralParams.o $dollar(SRCDIR)/GeneralParams.f95"          	>> $Cfile  
+ echo                                                                                                           	>> $Cfile
+ echo "  $dollar(OBJDIR)/Geometry.o: $dollar(SRCDIR)/Geometry.f95"                                              	>> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Geometry.o $dollar(SRCDIR)/Geometry.f95"                    	>> $Cfile  
+ echo                                                                                                           	>> $Cfile
+ 
+# Atmospheric parameters modules
+ echo "  $dollar(OBJDIR)/Atm_Params.o: $dollar(SRCDIR)/Atm_Params.f95"                                          	>> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_Params.o $dollar(SRCDIR)/Atm_Params.f95"                	>> $Cfile  
+ echo                                                                                                           	>> $Cfile
+ if ($POP) then
+   echo "  $dollar(OBJDIR)/Atm_POP_Params.o: $dollar(SRCDIR)/Atm_POP_Params.f95"                                        >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_POP_Params.o $dollar(SRCDIR)/Atm_POP_Params.f95"        >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+ endif
+ if ($HG) then
+   echo "  $dollar(OBJDIR)/Atm_HG_Params.o: $dollar(SRCDIR)/Atm_HG_Params.f95"                                       >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_HG_Params.o $dollar(SRCDIR)/Atm_HG_Params.f95"       >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+ endif
+ if ($HM) then
+   echo "  $dollar(OBJDIR)/Atm_HM_Params.o: $dollar(SRCDIR)/Atm_HM_Params.f95"                                       >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_HM_Params.o $dollar(SRCDIR)/Atm_HM_Params.f95"       >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+ endif
+
+# Soil parameters modules
+ if ($SOIL) then
+   if ($POP) then
+     echo "  $dollar(OBJDIR)/Soil_POP_Params.o: $dollar(SRCDIR)/Soil_POP_Params.f95"                                    >> $Cfile  
+     echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Soil_POP_Params.o $dollar(SRCDIR)/Soil_POP_Params.f95"      >> $Cfile  
+     echo                                                                                                               >> $Cfile
+   endif                                                                                                                           
+   echo "  $dollar(OBJDIR)/Soil_Params.o: $dollar(SRCDIR)/Soil_Params.f95"                                              >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Soil_Params.o $dollar(SRCDIR)/Soil_Params.f95"              >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+ endif                                                                                                                          
+
+# Vegetation parameters modules
+ if ($VEG) then
+   if ($POP) then
+     echo "  $dollar(OBJDIR)/Veg_POP_Params.o: $dollar(SRCDIR)/Veg_POP_Params.f95"                                      >> $Cfile  
+     echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Veg_POP_Params.o $dollar(SRCDIR)/Veg_POP_Params.f95"        >> $Cfile  
+     echo                                                                                                               >> $Cfile
+   endif                                                                                                                           
+   echo "  $dollar(OBJDIR)/Veg_Params.o: $dollar(SRCDIR)/Veg_Params.f95"                                                >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Veg_Params.o $dollar(SRCDIR)/Veg_Params.f95"                >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+ endif
+
+# Ocean parameters modules
+ if ($OCN) then
+   if ($POP) then 
+     echo "  $dollar(OBJDIR)/Ocn_POP_Params.o: $dollar(SRCDIR)/Ocn_POP_Params.f95"                                      >> $Cfile  
+     echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Ocn_POP_Params.o $dollar(SRCDIR)/Ocn_POP_Params.f95"        >> $Cfile  
+     echo                                                                                                               >> $Cfile
+   endif                                                                                                                          
+   echo "  $dollar(OBJDIR)/Ocn_Params.o: $dollar(SRCDIR)/Ocn_Params.f95"                                                >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Ocn_Params.o $dollar(SRCDIR)/Ocn_Params.f95"                >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+ endif                                                                                                                         
+
+# Exchange parameters module
+ echo "  $dollar(OBJDIR)/Exch_Params.o: $dollar(SRCDIR)/Exch_Params.f95"                                             >> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Exch_Params.o $dollar(SRCDIR)/Exch_Params.f95"                   >> $Cfile  
+ echo                                                                                                                   >> $Cfile
+
+# Atmospheric common modules 
+ echo "  $dollar(OBJDIR)/Atm_Diffusion.o: $dollar(SRCDIR)/Atm_Diffusion.f95"                                         >> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_Diffusion.o $dollar(SRCDIR)/Atm_Diffusion.f95"               >> $Cfile  
+ echo                                                                                                                   >> $Cfile
+ echo "  $dollar(OBJDIR)/Atm_HorizAdvect.o: $dollar(SRCDIR)/Atm_HorizAdvect.f95"                                     >> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_HorizAdvect.o $dollar(SRCDIR)/Atm_HorizAdvect.f95"           >> $Cfile  
+ echo                                                                                                                   >> $Cfile
+ echo "  $dollar(OBJDIR)/Atm_VertAdvect.o: $dollar(SRCDIR)/Atm_VertAdvect.f95"                                       >> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_VertAdvect.o $dollar(SRCDIR)/Atm_VertAdvect.f95"             >> $Cfile  
+ echo                                                                                                                   >> $Cfile
+
+# Atmospheric pollutant groups specific modules
+ if ($POP) then
+   echo "  $dollar(OBJDIR)/Atm_POP_General.o: $dollar(SRCDIR)/Atm_POP_General.f95"                                      >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_POP_General.o $dollar(SRCDIR)/Atm_POP_General.f95"      >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+ endif
+ if ($HG) then
+   echo "  $dollar(OBJDIR)/Atm_HG_Chemistry.o: $dollar(SRCDIR)/Atm_HG_Chemistry.f95"                                 >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_HG_Chemistry.o $dollar(SRCDIR)/Atm_HG_Chemistry.f95" >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+   echo "  $dollar(OBJDIR)/Atm_HG_General.o: $dollar(SRCDIR)/Atm_HG_General.f95"                                     >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_HG_General.o $dollar(SRCDIR)/Atm_HG_General.f95"     >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+ endif                                                                                                          
+ if ($HM) then
+   echo "  $dollar(OBJDIR)/Atm_HM_General.o: $dollar(SRCDIR)/Atm_HM_General.f95"                                     >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_HM_General.o $dollar(SRCDIR)/Atm_HM_General.f95"     >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+ endif                                                                                                          
+ if ($AERO) then
+   echo "  $dollar(OBJDIR)/Atm_AERO_Chemistry.o: $dollar(SRCDIR)/Atm_AERO_Chemistry.f95"                                >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_AERO_Chemistry.o $dollar(SRCDIR)/Atm_AERO_Chemistry.f95" >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+   echo "  $dollar(OBJDIR)/Atm_AERO_General.o: $dollar(SRCDIR)/Atm_AERO_General.f95"                                    >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_AERO_General.o $dollar(SRCDIR)/Atm_AERO_General.f95"    >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+ endif                                                                                                          
+
+# Atmospheric exchange module
+ echo "  $dollar(OBJDIR)/Atm_Exchange.o: $dollar(SRCDIR)/Atm_Exchange.f95"                                           >> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_Exchange.o $dollar(SRCDIR)/Atm_Exchange.f95"                 >> $Cfile  
+ echo                                                                                                                   >> $Cfile
+
+# Soil modules
+ if ($SOIL) then
+   if ($POP) then
+     echo "  $dollar(OBJDIR)/Soil_POP_General.o: $dollar(SRCDIR)/Soil_POP_General.f95"                                  >> $Cfile  
+     echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Soil_POP_General.o $dollar(SRCDIR)/Soil_POP_General.f95"    >> $Cfile  
+     echo                                                                                                               >> $Cfile
+   endif
+ endif                                                                                                                        
+
+# Vegetation modules
+ if ($VEG) then
+   if ($POP) then
+     echo "  $dollar(OBJDIR)/Veg_POP_General.o: $dollar(SRCDIR)/Veg_POP_General.f95"                                    >> $Cfile  
+     echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Veg_POP_General.o $dollar(SRCDIR)/Veg_POP_General.f95"      >> $Cfile  
+     echo                                                                                                               >> $Cfile
+   endif
+ endif                                                                                                                        
+
+# Ocean modules
+ if ($OCN) then
+   echo "  $dollar(OBJDIR)/Ocn_AdvDiff.o: $dollar(SRCDIR)/Ocn_AdvDiff.f95"                                              >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Ocn_AdvDiff.o $dollar(SRCDIR)/Ocn_AdvDiff.f95"              >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+   if ($POP) then
+     echo "  $dollar(OBJDIR)/Ocn_POP_General.o: $dollar(SRCDIR)/Ocn_POP_General.f95"                                    >> $Cfile  
+     echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Ocn_POP_General.o $dollar(SRCDIR)/Ocn_POP_General.f95"      >> $Cfile  
+     echo                                                                                                               >> $Cfile
+   endif
+ endif                                                                                                                          
+
+# Input & output modules
+ echo "  $dollar(OBJDIR)/OutputBalance.o: $dollar(SRCDIR)/OutputBalance.f95"                                           >> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/OutputBalance.o $dollar(SRCDIR)/OutputBalance.f95"          >> $Cfile  
+ echo                                                                                                                  >> $Cfile
+ echo "  $dollar(OBJDIR)/OutputGeneral.o: $dollar(SRCDIR)/OutputGeneral.f95"                                           >> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/OutputGeneral.o $dollar(SRCDIR)/OutputGeneral.f95"          >> $Cfile  
+ echo                                                                                                                  >> $Cfile
+ echo "  $dollar(OBJDIR)/OutputTxtProcs.o: $dollar(SRCDIR)/OutputTxtProcs.f95"                                           >> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/OutputTxtProcs.o $dollar(SRCDIR)/OutputTxtProcs.f95"          >> $Cfile  
+ echo                                                                                                                  >> $Cfile
+ echo "  $dollar(OBJDIR)/Atm_NcfOutput.o: $dollar(SRCDIR)/Atm_NcfOutput.f95"                                               >> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_NcfOutput.o $dollar(SRCDIR)/Atm_NcfOutput.f95"                     >> $Cfile  
+ echo                                                                                                                   >> $Cfile
+ echo "  $dollar(OBJDIR)/Atm_Output.o: $dollar(SRCDIR)/Atm_Output.f95"                                               >> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_Output.o $dollar(SRCDIR)/Atm_Output.f95"                     >> $Cfile  
+ echo                                                                                                                   >> $Cfile
+# echo "  $dollar(OBJDIR)/Atm_Output.o: $dollar(SRCDIR)/Atm_Output_old.f95"                                               >> $Cfile  
+# echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_Output.o $dollar(SRCDIR)/Atm_Output_old.f95"                     >> $Cfile  
+# echo                                                                                                                   >> $Cfile
+ echo "  $dollar(OBJDIR)/Atm_Input.o: $dollar(SRCDIR)/Atm_Input.f95"                                                 >> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_Input.o $dollar(SRCDIR)/Atm_Input.f95"                    	>> $Cfile  
+ echo                                                                                                                   >> $Cfile
+ if ($SOIL) then
+   echo "  $dollar(OBJDIR)/Soil_Output.o: $dollar(SRCDIR)/Soil_Output.f95"                                              >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Soil_Output.o $dollar(SRCDIR)/Soil_Output.f95"              >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+   echo "  $dollar(OBJDIR)/Soil_Input.o: $dollar(SRCDIR)/Soil_Input.f95"                                                >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Soil_Input.o $dollar(SRCDIR)/Soil_Input.f95"                >> $Cfile  
+   echo                                                                                                               	>> $Cfile
+ endif                                                                                                                     
+ if ($VEG) then
+   echo "  $dollar(OBJDIR)/Veg_Output.o: $dollar(SRCDIR)/Veg_Output.f95"                                                >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Veg_Output.o $dollar(SRCDIR)/Veg_Output.f95"                >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+   echo "  $dollar(OBJDIR)/Veg_Input.o: $dollar(SRCDIR)/Veg_Input.f95"                                                  >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Veg_Input.o $dollar(SRCDIR)/Veg_Input.f95"                  >> $Cfile  
+   echo                                                                                                               	>> $Cfile
+ endif                                                                                                                     
+ if ($OCN) then
+   echo "  $dollar(OBJDIR)/Ocn_Output.o: $dollar(SRCDIR)/Ocn_Output.f95"                                                >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Ocn_Output.o $dollar(SRCDIR)/Ocn_Output.f95"                >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+   echo "  $dollar(OBJDIR)/Ocn_Input.o: $dollar(SRCDIR)/Ocn_Input.f95"                                                  >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Ocn_Input.o $dollar(SRCDIR)/Ocn_Input.f95"                  >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+ endif                                                                                                                   
+ 
+# Media general modules
+ echo "  $dollar(OBJDIR)/Atm_General.o: $dollar(SRCDIR)/Atm_General.f95"                                             >> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Atm_General.o $dollar(SRCDIR)/Atm_General.f95"                   >> $Cfile  
+ echo                                                                                                                   >> $Cfile
+ if ($SOIL) then
+   echo "  $dollar(OBJDIR)/Soil_General.o: $dollar(SRCDIR)/Soil_General.f95"                                            >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Soil_General.o $dollar(SRCDIR)/Soil_General.f95"            >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+ endif                                                                                                                        
+ if ($VEG) then
+   echo "  $dollar(OBJDIR)/Veg_General.o: $dollar(SRCDIR)/Veg_General.f95"                                              >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Veg_General.o $dollar(SRCDIR)/Veg_General.f95"              >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+ endif                                                                                                                        
+ if ($OCN) then
+   echo "  $dollar(OBJDIR)/Ocn_General.o: $dollar(SRCDIR)/Ocn_General.f95"                                              >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Ocn_General.o $dollar(SRCDIR)/Ocn_General.f95"              >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+ endif                                                                                                                      
+ 
+# Exchange general modules
+ if ($POP) then 
+   echo "  $dollar(OBJDIR)/Exch_General_POP.o: $dollar(SRCDIR)/Exch_General_POP.f95"                                    >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Exch_General_POP.o $dollar(SRCDIR)/Exch_General_POP.f95"    >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+ endif                                                                                                                           
+ if ($HG) then 
+   echo "  $dollar(OBJDIR)/Exch_General.o: $dollar(SRCDIR)/Exch_General.f95"                                         >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Exch_General.o $dollar(SRCDIR)/Exch_General.f95"         >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+ endif                                                                                                                           
+ if ($HM) then 
+   echo "  $dollar(OBJDIR)/Exch_General.o: $dollar(SRCDIR)/Exch_General.f95"                                         >> $Cfile  
+   echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/Exch_General.o $dollar(SRCDIR)/Exch_General.f95"         >> $Cfile  
+   echo                                                                                                                 >> $Cfile
+ endif                                                                                                                           
+
+# General procedures module
+ echo "  $dollar(OBJDIR)/GeneralProcs.o: $dollar(SRCDIR)/GeneralProcs.f95"                                           >> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/GeneralProcs.o $dollar(SRCDIR)/GeneralProcs.f95"                 >> $Cfile  
+ echo                                                                                                                   >> $Cfile
+
+# The main program
+ echo "  $dollar(OBJDIR)/MainProg.o: $dollar(SRCDIR)/MainProg.f95"                                                   >> $Cfile  
+ echo "	$dollar(FC) $dollar(FFLAGS) $dollar(OBJDIR)/MainProg.o $dollar(SRCDIR)/MainProg.f95"                    	>> $Cfile  
+ echo             											       		>> $Cfile          
+
+ echo "clean:"                                                         							>> $Cfile
+ echo "	rm -f "$OBJDIR"/*.o"                                           							>> $Cfile
+ echo "	rm -f "$OBJDIR"/ncf/*.o"                                       							>> $Cfile
+ echo "	rm -f "$MODDIR"/*.mod"                                         							>> $Cfile
+ echo "	rm -f "$RUNDIR"/glemos"                                        							>> $Cfile
+
+chmod 777 $Cfile                                                                                                        >> $Cfile
