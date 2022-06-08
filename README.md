@@ -1,6 +1,6 @@
 # Description
 
-This repository is a part of the GLEMOS WorkSpace and contains the GLEMOS modeling management script (GLEMOS.dir.maker) including its input files as well as scripts for the model compilation. User Manual is avalible on the MSC-E website: https://www.msceast.org/
+This repository is a part of the GLEMOS WorkSpace and contains the GLEMOS modeling management script (GLEMOS.dir.maker) including its input files as well as scripts for the model compilation.
 
 
 # About GLEMOS
